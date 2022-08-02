@@ -75,11 +75,11 @@ private:
     // Vulkan will validate this for us, but just for fun:
     const auto valid = std::ranges::all_of(
         std::span{glfwExtensions, glfwExtensionCount},
-        [&](auto extension_name) {
+        [&](const auto &extension_name) {
           return std::ranges::find_if(
                      available_extensions, [&](const auto &extension) {
                        return std::strcmp(extension.extensionName,
-                                          extension_name);
+                                          extension_name) == 0;
                      }) != available_extensions.end();
         });
 
