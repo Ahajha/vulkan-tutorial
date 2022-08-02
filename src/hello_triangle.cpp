@@ -1,8 +1,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
@@ -13,7 +16,6 @@ class HelloTriangleApplication {
 public:
   void run() {
     initWindow();
-    queryExtensions();
     initVulkan();
     mainLoop();
     cleanupVulkan();
@@ -32,6 +34,20 @@ private:
 
     // Width, Height, window name, monitor, unused(OpenGL only)
     window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+  }
+
+  std::vector<VkExtensionProperties> queryExtensions() {
+    // For the first call, just get the number of extensions (last parameter
+    // nullptr)
+    uint32_t extensionCount = 0;
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+
+    std::vector<VkExtensionProperties> extensions(extensionCount);
+
+    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
+                                           extensions.data());
+
+    return extensions;
   }
 
   void createInstance() {
@@ -54,6 +70,24 @@ private:
     const char **glfwExtensions =
         glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
+    const auto available_extensions = queryExtensions();
+
+    // Vulkan will validate this for us, but just for fun:
+    const auto valid = std::ranges::all_of(
+        std::span{glfwExtensions, glfwExtensionCount},
+        [&](auto extension_name) {
+          return std::ranges::find_if(
+                     available_extensions, [&](const auto &extension) {
+                       return std::strcmp(extension.extensionName,
+                                          extension_name);
+                     }) != available_extensions.end();
+        });
+
+    if (!valid) {
+      throw std::runtime_error(
+          "Vulkan does not have all extensions necessary for glfw");
+    }
+
     createInfo.enabledExtensionCount = glfwExtensionCount;
     createInfo.ppEnabledExtensionNames = glfwExtensions;
 
@@ -64,24 +98,6 @@ private:
     // always nullptr for this tutorial.
     if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
       throw std::runtime_error("failed to create instance!");
-    }
-  }
-
-  void queryExtensions() {
-    // For the first call, just get the number of extensions (last parameter
-    // nullptr)
-    uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> extensions(extensionCount);
-
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
-                                           extensions.data());
-
-    std::cout << "available extensions:\n";
-
-    for (const auto &extension : extensions) {
-      std::cout << '\t' << extension.extensionName << '\n';
     }
   }
 
