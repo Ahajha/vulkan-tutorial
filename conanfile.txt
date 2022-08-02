@@ -1,6 +1,6 @@
 # You may need to run:
-conan install . -if build -b missing -pr:b default -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
-(notice the last two args) if installing for the first time
+# conan install . -if build -b missing -pr:b default -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+# (notice the last two args) if installing for the first time
 
 [requires]
 glfw/3.3.7
