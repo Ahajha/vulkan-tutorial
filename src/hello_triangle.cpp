@@ -226,9 +226,78 @@ private:
     }
   }
 
+  static bool isDeviceSuitable(VkPhysicalDevice device) {
+    // Query properties
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+    // Print some info, for fun:
+    std::cout << "Device name: " << deviceProperties.deviceName << '\n';
+
+    const auto apiVersion = deviceProperties.apiVersion;
+    std::cout << "Vulkan version supported by device: "
+              << VK_API_VERSION_MAJOR(apiVersion) << '.'
+              << VK_API_VERSION_MINOR(apiVersion) << '.'
+              << VK_API_VERSION_MINOR(apiVersion) << '\n';
+
+    const auto driverVersion = deviceProperties.driverVersion;
+    std::cout << "Driver version: " << VK_API_VERSION_MAJOR(driverVersion)
+              << '.' << VK_API_VERSION_MINOR(driverVersion) << '.'
+              << VK_API_VERSION_MINOR(driverVersion) << '\n';
+
+    const char *deviceType = "unknown";
+    switch (deviceProperties.deviceType) {
+    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+      deviceType = "other";
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+      deviceType = "integrated";
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+      deviceType = "discrete";
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+      deviceType = "virtual";
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+      deviceType = "cpu";
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM:
+      break;
+    }
+    std::cout << "Device type: " << deviceType << '\n';
+
+    // Query features
+    VkPhysicalDeviceFeatures deviceFeatures;
+    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+    // For now, anything is suitable for our purposes.
+    return true;
+  }
+
+  void pickPhysicalDevice() {
+    std::uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+    if (deviceCount == 0) {
+      throw std::runtime_error("failed to find GPUs with Vulkan support!");
+    }
+
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+    auto iter = std::ranges::find_if(
+        devices, [](auto &device) { return isDeviceSuitable(device); });
+
+    if (iter == devices.end()) {
+      throw std::runtime_error("failed to find a suitable GPU!");
+    }
+  }
+
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    pickPhysicalDevice();
   }
 
   void mainLoop() {
@@ -254,6 +323,7 @@ private:
   GLFWwindow *window;
   VkInstance instance;
   VkDebugUtilsMessengerEXT debugMessenger;
+  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 };
 
 int main() {
