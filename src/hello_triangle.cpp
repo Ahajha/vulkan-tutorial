@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -226,6 +227,60 @@ private:
     }
   }
 
+  struct QueueFamilyIndices {
+    // The queue index that supports graphics
+    std::optional<std::uint32_t> graphicsFamily;
+
+    bool isComplete() { return graphicsFamily.has_value(); }
+  };
+
+  static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+    QueueFamilyIndices indices;
+    // Logic to find queue family indices to populate struct with
+
+    std::uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
+                                             nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
+                                             queueFamilies.data());
+    /*
+    // Print queue info, for fun
+    for (const auto &qfamily : queueFamilies) {
+      std::cout << "Queue count: " << qfamily.queueCount << '\n';
+      std::cout << "Flags: ";
+      if (qfamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        std::cout << "Graphics ";
+      }
+      if (qfamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+        std::cout << "Compute ";
+      }
+      if (qfamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+        std::cout << "Transfer ";
+      }
+      if (qfamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+        std::cout << "Sparse binding ";
+      }
+      std::cout << '\n';
+    }
+    */
+    std::uint32_t i = 0;
+    for (const auto &queueFamily : queueFamilies) {
+      if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        indices.graphicsFamily = i;
+      }
+
+      if (indices.isComplete()) {
+        break;
+      }
+
+      i++;
+    }
+
+    return indices;
+  }
+
   static bool isDeviceSuitable(VkPhysicalDevice device) {
     // Query properties
     VkPhysicalDeviceProperties deviceProperties;
@@ -267,14 +322,17 @@ private:
     }
     std::cout << "Device type: " << deviceType << '\n';
 
-    // Query features
-    VkPhysicalDeviceFeatures deviceFeatures;
-    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+    // Query features (Currently unneeded)
+    // VkPhysicalDeviceFeatures deviceFeatures;
+    // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+    auto indices = findQueueFamilies(device);
 
     // For now, anything is suitable for our purposes.
-    return true;
+    return indices.isComplete();
   }
 
+  // Sets physicalDevice to a suitable device
   void pickPhysicalDevice() {
     std::uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -292,12 +350,54 @@ private:
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
     }
+
+    physicalDevice = *iter;
+  }
+
+  void createLogicalDevice() {
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+    VkDeviceQueueCreateInfo queueCreateInfo{};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+    queueCreateInfo.queueCount = 1;
+
+    float queuePriority = 1.0f;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    VkPhysicalDeviceFeatures deviceFeatures{};
+
+    VkDeviceCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+    createInfo.enabledExtensionCount = 0;
+
+    if constexpr (enableValidationLayers) {
+      createInfo.enabledLayerCount =
+          static_cast<std::uint32_t>(validationLayers.size());
+      createInfo.ppEnabledLayerNames = validationLayers.data();
+    } else {
+      createInfo.enabledLayerCount = 0;
+    }
+
+    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to create logical device!");
+    }
+
+    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
   }
 
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
     pickPhysicalDevice();
+    createLogicalDevice();
   }
 
   void mainLoop() {
@@ -307,6 +407,8 @@ private:
   }
 
   void cleanupVulkan() {
+    vkDestroyDevice(device, nullptr);
+
     if constexpr (enableValidationLayers) {
       DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
@@ -324,6 +426,8 @@ private:
   VkInstance instance;
   VkDebugUtilsMessengerEXT debugMessenger;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+  VkDevice device;
+  VkQueue graphicsQueue;
 };
 
 int main() {
