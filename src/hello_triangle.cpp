@@ -344,8 +344,7 @@ private:
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
-    auto iter = std::ranges::find_if(
-        devices, [](auto &device) { return isDeviceSuitable(device); });
+    auto iter = std::ranges::find_if(devices, &isDeviceSuitable);
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
@@ -393,9 +392,17 @@ private:
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
   }
 
+  void createSurface() {
+    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) !=
+        VK_SUCCESS) {
+      throw std::runtime_error("failed to create window surface!");
+    }
+  }
+
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
+    createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
   }
@@ -407,11 +414,14 @@ private:
   }
 
   void cleanupVulkan() {
+
     vkDestroyDevice(device, nullptr);
 
     if constexpr (enableValidationLayers) {
       DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
+
+    vkDestroySurfaceKHR(instance, surface, nullptr);
 
     vkDestroyInstance(instance, nullptr);
   }
@@ -428,6 +438,7 @@ private:
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
   VkQueue graphicsQueue;
+  VkSurfaceKHR surface;
 };
 
 int main() {
