@@ -17,6 +17,8 @@ constexpr std::uint32_t HEIGHT = 600;
 
 constexpr std::array validationLayers = {"VK_LAYER_KHRONOS_validation"};
 
+constexpr std::array deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
 #ifdef NDEBUG
 constexpr bool enableValidationLayers = false;
 #else
@@ -292,6 +294,27 @@ private:
     return indices;
   }
 
+  // Returns true if deviceExtensions is a subset of the available device
+  // extensions.
+  bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+    std::uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
+                                         nullptr);
+
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
+                                         availableExtensions.data());
+
+    std::set<std::string> requiredExtensions(deviceExtensions.begin(),
+                                             deviceExtensions.end());
+
+    for (const auto &extension : availableExtensions) {
+      requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
+  }
+
   bool isDeviceSuitable(VkPhysicalDevice device) {
     // Query properties
     VkPhysicalDeviceProperties deviceProperties;
@@ -339,7 +362,9 @@ private:
 
     auto indices = findQueueFamilies(device);
 
-    return indices.isComplete();
+    const bool extensionsSupported = checkDeviceExtensionSupport(device);
+
+    return indices.isComplete() && extensionsSupported;
   }
 
   // Sets physicalDevice to a suitable device
@@ -398,7 +423,9 @@ private:
     VkPhysicalDeviceFeatures deviceFeatures{};
     createInfo.pEnabledFeatures = &deviceFeatures;
 
-    createInfo.enabledExtensionCount = 0;
+    createInfo.enabledExtensionCount =
+        static_cast<std::uint32_t>(deviceExtensions.size());
+    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
     if constexpr (enableValidationLayers) {
       createInfo.enabledLayerCount =
