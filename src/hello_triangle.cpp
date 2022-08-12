@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <vector>
@@ -230,11 +231,14 @@ private:
   struct QueueFamilyIndices {
     // The queue index that supports graphics
     std::optional<std::uint32_t> graphicsFamily;
+    std::optional<std::uint32_t> presentFamily;
 
-    bool isComplete() { return graphicsFamily.has_value(); }
+    bool isComplete() const {
+      return graphicsFamily.has_value() && presentFamily.has_value();
+    }
   };
 
-  static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+  QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
     QueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
@@ -271,6 +275,13 @@ private:
         indices.graphicsFamily = i;
       }
 
+      VkBool32 presentSupport = false;
+      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+
+      if (presentSupport) {
+        indices.presentFamily = i;
+      }
+
       if (indices.isComplete()) {
         break;
       }
@@ -281,7 +292,7 @@ private:
     return indices;
   }
 
-  static bool isDeviceSuitable(VkPhysicalDevice device) {
+  bool isDeviceSuitable(VkPhysicalDevice device) {
     // Query properties
     VkPhysicalDeviceProperties deviceProperties;
     vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -328,7 +339,6 @@ private:
 
     auto indices = findQueueFamilies(device);
 
-    // For now, anything is suitable for our purposes.
     return indices.isComplete();
   }
 
@@ -344,7 +354,8 @@ private:
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
-    auto iter = std::ranges::find_if(devices, &isDeviceSuitable);
+    auto iter = std::ranges::find_if(
+        devices, [this](auto &device) { return isDeviceSuitable(device); });
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
@@ -356,22 +367,35 @@ private:
   void createLogicalDevice() {
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-    queueCreateInfo.queueCount = 1;
+    std::cout << "Graphics queue family index: "
+              << indices.graphicsFamily.value() << '\n';
+    std::cout << "Present queue family index: " << indices.presentFamily.value()
+              << '\n';
+
+    std::set<std::uint32_t> uniqueQueueFamilies = {
+        indices.graphicsFamily.value(), indices.presentFamily.value()};
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos(
+        uniqueQueueFamilies.size());
 
     float queuePriority = 1.0f;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
-
-    VkPhysicalDeviceFeatures deviceFeatures{};
+    std::uint32_t index = 0;
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+      auto &queueCreateInfo = queueCreateInfos[index];
+      queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+      queueCreateInfo.queueFamilyIndex = queueFamily;
+      queueCreateInfo.queueCount = 1;
+      queueCreateInfo.pQueuePriorities = &queuePriority;
+      ++index;
+    }
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
-    createInfo.queueCreateInfoCount = 1;
+    createInfo.queueCreateInfoCount =
+        static_cast<std::uint32_t>(queueCreateInfos.size());
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
 
+    VkPhysicalDeviceFeatures deviceFeatures{};
     createInfo.pEnabledFeatures = &deviceFeatures;
 
     createInfo.enabledExtensionCount = 0;
@@ -390,6 +414,7 @@ private:
     }
 
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
   }
 
   void createSurface() {
@@ -438,6 +463,7 @@ private:
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
   VkQueue graphicsQueue;
+  VkQueue presentQueue;
   VkSurfaceKHR surface;
 };
 
