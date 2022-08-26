@@ -17,12 +17,12 @@ endforeach()
 find_package(shaderc REQUIRED)
 
 # Provided a base filename, reads `shaders/infile`
-# and compiles the shader to ${CMAKE_BUILD_DIR}/shaders/outfile when it changes.
+# and compiles the shader to spv/outfile when it changes.
 macro(compile_shader infile outfile)
     add_custom_command(
-        OUTPUT "${CMAKE_BINARY_DIR}/shaders/${outfile}"
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/spv/${outfile}"
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${infile}"
-        COMMAND "${shaderc_INCLUDE_DIR}/../bin/glslc" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${infile}" -o "${CMAKE_BINARY_DIR}/shaders/${outfile}"
+        COMMAND "${shaderc_INCLUDE_DIR}/../bin/glslc" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/${infile}" -o "${CMAKE_CURRENT_SOURCE_DIR}/spv/${outfile}"
         COMMENT "Compiling ${infile}"
     )
 endmacro()
@@ -31,6 +31,6 @@ compile_shader(shader.frag frag.spv)
 compile_shader(shader.vert vert.spv)
 
 target_sources(hello_triangle PRIVATE
-    "${CMAKE_BINARY_DIR}/shaders/frag.spv"
-    "${CMAKE_BINARY_DIR}/shaders/vert.spv"
+    "${CMAKE_CURRENT_SOURCE_DIR}/spv/frag.spv"
+    "${CMAKE_CURRENT_SOURCE_DIR}/spv/vert.spv"
 )
