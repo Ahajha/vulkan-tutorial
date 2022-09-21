@@ -1007,6 +1007,26 @@ private:
     }
   }
 
+  void createSyncObjects() {
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+    // Start in the signaled state
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    if (vkCreateSemaphore(device, &semaphoreInfo, nullptr,
+                          &imageAvailableSemaphore) != VK_SUCCESS ||
+        vkCreateSemaphore(device, &semaphoreInfo, nullptr,
+                          &renderFinishedSemaphore) != VK_SUCCESS ||
+        vkCreateFence(device, &fenceInfo, nullptr, &inFlightFence) !=
+            VK_SUCCESS) {
+      throw std::runtime_error("failed to create semaphores!");
+    }
+  }
+
   void initVulkan() {
     createInstance();
     setupDebugMessenger();
@@ -1020,15 +1040,29 @@ private:
     createFramebuffers();
     createCommandPool();
     createCommandBuffer();
+    createSyncObjects();
+  }
+
+  void drawFrame() {
+    // Wait for the previous frame to finish
+    vkWaitForFences(device, 1, &inFlightFence, VK_TRUE,
+                    std::numeric_limits<std::uint64_t>::max());
+
+    vkResetFences(device, 1, &inFlightFence);
   }
 
   void mainLoop() {
     while (!glfwWindowShouldClose(window)) {
       glfwPollEvents();
+      drawFrame();
     }
   }
 
   void cleanupVulkan() {
+    vkDestroyFence(device, inFlightFence, nullptr);
+    vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+    vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+
     vkDestroyCommandPool(device, commandPool, nullptr);
 
     for (auto framebuffer : swapChainFramebuffers) {
@@ -1081,6 +1115,9 @@ private:
   std::vector<VkFramebuffer> swapChainFramebuffers;
   VkCommandPool commandPool;
   VkCommandBuffer commandBuffer;
+  VkSemaphore imageAvailableSemaphore;
+  VkSemaphore renderFinishedSemaphore;
+  VkFence inFlightFence;
 };
 
 int main() {
