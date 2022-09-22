@@ -718,6 +718,20 @@ private:
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
 
+    // Declare our single subpass to be dependent on the implicit beginning
+    // subpass
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+
+    // Wait for the swap chain to finish reading from the image before we can
+    // access it.
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
+
     if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create render pass!");
