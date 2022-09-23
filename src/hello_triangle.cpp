@@ -1,6 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#include <vulkan/vulkan.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -42,11 +44,8 @@ private:
   // Returns true iff all requested validation layers (in validationLayers) are
   // available.
   bool checkValidationLayerSupport() {
-    std::uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+    const auto availableLayers = vk::enumerateInstanceLayerProperties();
+    // vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
     return std::ranges::all_of(validationLayers, [&](const char *layerName) {
       return std::ranges::find_if(availableLayers, [&](const auto &layerProps) {
@@ -67,21 +66,6 @@ private:
 
     // Width, Height, window name, monitor, unused(OpenGL only)
     window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-  }
-
-  // Returns the available Vulkan extensions
-  std::vector<VkExtensionProperties> queryExtensions() {
-    // For the first call, just get the number of extensions (last parameter
-    // nullptr)
-    std::uint32_t extensionCount = 0;
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> extensions(extensionCount);
-
-    vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount,
-                                           extensions.data());
-
-    return extensions;
   }
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL
@@ -112,7 +96,8 @@ private:
       extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
-    const auto available_extensions = queryExtensions();
+    const auto available_extensions =
+        vk::enumerateInstanceExtensionProperties();
 
     // Vulkan will validate this for us, but just for fun:
     const auto valid = std::ranges::all_of(
