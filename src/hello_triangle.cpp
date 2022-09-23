@@ -460,6 +460,8 @@ private:
       actualExtent.height =
           std::clamp(actualExtent.height, capabilities.minImageExtent.height,
                      capabilities.maxImageExtent.height);
+
+      return actualExtent;
     }
   }
 
