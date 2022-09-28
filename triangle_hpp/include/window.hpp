@@ -6,6 +6,7 @@
 #include "config.hpp"
 
 #include <memory>
+#include <span>
 
 namespace triangle_hpp {
 class Window {
@@ -13,6 +14,8 @@ public:
   Window();
 
   void run();
+
+  static std::span<const char *> getRequiredExtensions();
 
 private:
   static GLFWwindow *createWindow();

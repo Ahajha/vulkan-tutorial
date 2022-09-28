@@ -29,4 +29,12 @@ void Window::run() {
   }
 }
 
+std::span<const char *> Window::getRequiredExtensions() {
+  std::uint32_t glfwExtensionCount = 0;
+  const char **glfwExtensions =
+      glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+  return {glfwExtensions, glfwExtensionCount};
+}
+
 } // namespace triangle_hpp
