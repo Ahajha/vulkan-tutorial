@@ -37,7 +37,8 @@ public:
   HelloTriangleApplication()
       : window{initWindow()}
       , instance{createInstance()}
-      , debugMessenger{instance, createDebugMessengerCreateInfo()} {
+      , debugMessenger{instance, createDebugMessengerCreateInfo()}
+      , surface{createSurface()} {
     initVulkan();
   }
 
@@ -196,7 +197,8 @@ private:
       }
 
       VkBool32 presentSupport = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, *surface,
+                                           &presentSupport);
 
       if (presentSupport) {
         indices.presentFamily = i;
@@ -244,29 +246,29 @@ private:
     SwapChainSupportDetails details;
 
     // Query basic surface capabilities
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface,
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, *surface,
                                               &details.capabilities);
 
     // Query available surface formats
     std::uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount,
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, *surface, &formatCount,
                                          nullptr);
 
     if (formatCount != 0) {
       details.formats.resize(formatCount);
-      vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount,
+      vkGetPhysicalDeviceSurfaceFormatsKHR(device, *surface, &formatCount,
                                            details.formats.data());
     }
 
     // Query available presentation modes
     std::uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface,
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, *surface,
                                               &presentModeCount, nullptr);
 
     if (presentModeCount != 0) {
       details.presentModes.resize(presentModeCount);
       vkGetPhysicalDeviceSurfacePresentModesKHR(
-          device, surface, &presentModeCount, details.presentModes.data());
+          device, *surface, &presentModeCount, details.presentModes.data());
     }
 
     return details;
@@ -457,11 +459,13 @@ private:
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
   }
 
-  void createSurface() {
-    if (glfwCreateWindowSurface(*instance, window, nullptr, &surface) !=
+  [[nodiscard]] vk::raii::SurfaceKHR createSurface() {
+    VkSurfaceKHR native_surface;
+    if (glfwCreateWindowSurface(*instance, window, nullptr, &native_surface) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create window surface!");
     }
+    return {instance, native_surface};
   }
 
   void createSwapChain() {
@@ -486,7 +490,7 @@ private:
 
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = surface;
+    createInfo.surface = *surface;
 
     createInfo.minImageCount = imageCount;
     createInfo.imageFormat = surfaceFormat.format;
@@ -962,7 +966,6 @@ private:
   }
 
   void initVulkan() {
-    createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
@@ -1062,8 +1065,6 @@ private:
     vkDestroySwapchainKHR(device, swapChain, nullptr);
 
     vkDestroyDevice(device, nullptr);
-
-    vkDestroySurfaceKHR(*instance, surface, nullptr);
   }
 
   void cleanupWindow() {
@@ -1076,11 +1077,11 @@ private:
   vk::raii::Context context;
   vk::raii::Instance instance;
   vk::raii::DebugUtilsMessengerEXT debugMessenger;
+  vk::raii::SurfaceKHR surface;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
   VkQueue graphicsQueue;
   VkQueue presentQueue;
-  VkSurfaceKHR surface;
   VkSwapchainKHR swapChain;
   std::vector<VkImage> swapChainImages;
   VkFormat swapChainImageFormat;
