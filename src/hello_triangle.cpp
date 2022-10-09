@@ -188,7 +188,7 @@ private:
 
   // Returns true if deviceExtensions is a subset of the available device
   // extensions.
-  bool checkDeviceExtensionSupport(const vk::raii::PhysicalDevice& device) {
+  bool checkDeviceExtensionSupport(vk::PhysicalDevice device) {
     const auto availableExtensions =
         device.enumerateDeviceExtensionProperties();
 
@@ -204,14 +204,8 @@ private:
 
   // Contains information about swap chain support for a given physical device
   struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
-  };
-
-  struct SwapChainSupportDetails2 {
-    SwapChainSupportDetails2(const vk::raii::PhysicalDevice& device,
-                             const vk::raii::SurfaceKHR& surface)
+    SwapChainSupportDetails(const vk::raii::PhysicalDevice& device,
+                            const vk::raii::SurfaceKHR& surface)
         : capabilities{device.getSurfaceCapabilitiesKHR(*surface)}
         , formats{device.getSurfaceFormatsKHR(*surface)}
         , presentModes{device.getSurfacePresentModesKHR(*surface)} {}
@@ -221,46 +215,14 @@ private:
     std::vector<vk::PresentModeKHR> presentModes;
   };
 
-  SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
-    SwapChainSupportDetails details;
-
-    // Query basic surface capabilities
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, *surface,
-                                              &details.capabilities);
-
-    // Query available surface formats
-    std::uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, *surface, &formatCount,
-                                         nullptr);
-
-    if (formatCount != 0) {
-      details.formats.resize(formatCount);
-      vkGetPhysicalDeviceSurfaceFormatsKHR(device, *surface, &formatCount,
-                                           details.formats.data());
-    }
-
-    // Query available presentation modes
-    std::uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, *surface,
-                                              &presentModeCount, nullptr);
-
-    if (presentModeCount != 0) {
-      details.presentModes.resize(presentModeCount);
-      vkGetPhysicalDeviceSurfacePresentModesKHR(
-          device, *surface, &presentModeCount, details.presentModes.data());
-    }
-
-    return details;
-  }
-
   bool isDeviceSuitable(const vk::raii::PhysicalDevice& device) {
     auto indices = findQueueFamilies(*device);
 
-    const bool extensionsSupported = checkDeviceExtensionSupport(device);
+    const bool extensionsSupported = checkDeviceExtensionSupport(*device);
 
     bool swapChainAdequate = false;
     if (extensionsSupported) {
-      auto swapChainSupport = SwapChainSupportDetails2(device, surface);
+      auto swapChainSupport = SwapChainSupportDetails(device, surface);
       swapChainAdequate = !swapChainSupport.formats.empty() &&
                           !swapChainSupport.presentModes.empty();
     }
@@ -268,11 +230,11 @@ private:
     return indices.isComplete() && extensionsSupported && swapChainAdequate;
   }
 
-  VkSurfaceFormatKHR chooseSwapSurfaceFormat(
-      const std::span<const VkSurfaceFormatKHR> availableFormats) {
+  vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
+      const std::span<const vk::SurfaceFormatKHR> availableFormats) {
     for (const auto& availableFormat : availableFormats) {
-      if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
-          availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+      if (availableFormat.format == vk::Format::eB8G8R8A8Srgb &&
+          availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
         return availableFormat;
       }
     }
@@ -280,18 +242,19 @@ private:
     return availableFormats[0];
   }
 
-  VkPresentModeKHR chooseSwapPresentMode(
-      const std::span<const VkPresentModeKHR> availablePresentModes) {
+  vk::PresentModeKHR chooseSwapPresentMode(
+      const std::span<const vk::PresentModeKHR> availablePresentModes) {
     for (const auto& availablePresentMode : availablePresentModes) {
-      if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+      if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
         return availablePresentMode;
       }
     }
 
-    return VK_PRESENT_MODE_FIFO_KHR;
+    return vk::PresentModeKHR::eFifo;
   }
 
-  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+  vk::Extent2D
+  chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
 
     if (capabilities.currentExtent.width !=
         std::numeric_limits<std::uint32_t>::max()) {
@@ -301,8 +264,8 @@ private:
       int width, height;
       glfwGetFramebufferSize(window, &width, &height);
 
-      VkExtent2D actualExtent = {static_cast<std::uint32_t>(width),
-                                 static_cast<std::uint32_t>(height)};
+      vk::Extent2D actualExtent = {static_cast<std::uint32_t>(width),
+                                   static_cast<std::uint32_t>(height)};
 
       // Bound dimensions between the allowed min and max supported by the
       // implementation.
@@ -396,14 +359,12 @@ private:
   }
 
   void createSwapChain() {
-    SwapChainSupportDetails swapChainSupport =
-        querySwapChainSupport(*physicalDevice);
+    const auto swapChainSupport =
+        SwapChainSupportDetails(physicalDevice, surface);
 
-    VkSurfaceFormatKHR surfaceFormat =
-        chooseSwapSurfaceFormat(swapChainSupport.formats);
-    VkPresentModeKHR presentMode =
-        chooseSwapPresentMode(swapChainSupport.presentModes);
-    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+    auto surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+    auto presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+    auto extent = chooseSwapExtent(swapChainSupport.capabilities);
 
     // We should use 1 more than the minimum as a basic default, but make sure
     // this doesn't exceed the maximum.
@@ -420,9 +381,10 @@ private:
     createInfo.surface = *surface;
 
     createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
+    createInfo.imageFormat = static_cast<VkFormat>(surfaceFormat.format);
+    createInfo.imageColorSpace =
+        static_cast<VkColorSpaceKHR>(surfaceFormat.colorSpace);
+    createInfo.imageExtent = static_cast<VkExtent2D>(extent);
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
@@ -445,12 +407,13 @@ private:
 
     // We can specify a certain transform be applied to images, we don't want
     // any transformation here.
-    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+    createInfo.preTransform = static_cast<VkSurfaceTransformFlagBitsKHR>(
+        swapChainSupport.capabilities.currentTransform);
 
     // Something about the alpha channel and blending with other windows
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
-    createInfo.presentMode = presentMode;
+    createInfo.presentMode = static_cast<VkPresentModeKHR>(presentMode);
 
     // We don't care about obscured pixels
     createInfo.clipped = VK_TRUE;
@@ -471,8 +434,8 @@ private:
                             swapChainImages.data());
 
     // To be used later
-    swapChainImageFormat = surfaceFormat.format;
-    swapChainExtent = extent;
+    swapChainImageFormat = static_cast<VkFormat>(surfaceFormat.format);
+    swapChainExtent = static_cast<VkExtent2D>(extent);
   }
 
   void createImageViews() {
