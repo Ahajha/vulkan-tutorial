@@ -36,7 +36,8 @@ class HelloTriangleApplication {
 public:
   HelloTriangleApplication()
       : window{initWindow()}
-      , instance{createInstance()} {
+      , instance{createInstance()}
+      , debugMessenger{instance, createDebugMessengerCreateInfo()} {
     initVulkan();
   }
 
@@ -100,44 +101,6 @@ private:
     return extensions;
   }
 
-  VkResult CreateDebugUtilsMessengerEXT(
-      VkInstance instance,
-      const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-      const VkAllocationCallbacks* pAllocator,
-      VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-        instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-      return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    } else {
-      return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-  }
-
-  void DestroyDebugUtilsMessengerEXT(VkInstance instance,
-                                     VkDebugUtilsMessengerEXT debugMessenger,
-                                     const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-        instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-      func(instance, debugMessenger, pAllocator);
-    }
-  }
-
-  void populateDebugMessengerCreateInfo(
-      VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
-    createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-  }
-
   constexpr static vk::DebugUtilsMessengerCreateInfoEXT
   createDebugMessengerCreateInfo() {
     using enum vk::DebugUtilsMessageSeverityFlagBitsEXT;
@@ -147,18 +110,6 @@ private:
         .messageType = eGeneral | eValidation | ePerformance,
         .pfnUserCallback = debugCallback,
     };
-  }
-
-  void setupDebugMessenger() {
-    if constexpr (enableValidationLayers) {
-      VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-      populateDebugMessengerCreateInfo(createInfo);
-
-      if (CreateDebugUtilsMessengerEXT(*instance, &createInfo, nullptr,
-                                       &debugMessenger) != VK_SUCCESS) {
-        throw std::runtime_error("failed to set up debug messenger!");
-      }
-    }
   }
 
   // Creates the Vulkan instance
@@ -1011,8 +962,6 @@ private:
   }
 
   void initVulkan() {
-    // createInstance();
-    setupDebugMessenger();
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
@@ -1114,10 +1063,6 @@ private:
 
     vkDestroyDevice(device, nullptr);
 
-    if constexpr (enableValidationLayers) {
-      DestroyDebugUtilsMessengerEXT(*instance, debugMessenger, nullptr);
-    }
-
     vkDestroySurfaceKHR(*instance, surface, nullptr);
   }
 
@@ -1130,7 +1075,7 @@ private:
   GLFWwindow* window;
   vk::raii::Context context;
   vk::raii::Instance instance;
-  VkDebugUtilsMessengerEXT debugMessenger;
+  vk::raii::DebugUtilsMessengerEXT debugMessenger;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
   VkQueue graphicsQueue;
