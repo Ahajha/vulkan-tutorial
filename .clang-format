@@ -1,0 +1,4 @@
+---
+BreakConstructorInitializers: BeforeComma
+PointerAlignment: Left
+...

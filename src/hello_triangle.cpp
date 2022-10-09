@@ -1,7 +1,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_raii.hpp>
 
 #include <algorithm>
 #include <array>
@@ -32,29 +34,29 @@ constexpr bool enableValidationLayers = true;
 
 class HelloTriangleApplication {
 public:
-  void run() {
-    initWindow();
+  HelloTriangleApplication()
+      : window{initWindow()}
+      , instance{createInstance()} {
     initVulkan();
-    mainLoop();
+  }
+
+  void run() { mainLoop(); }
+
+  ~HelloTriangleApplication() {
     cleanupVulkan();
     cleanupWindow();
   }
 
+  // clang-format off
+  HelloTriangleApplication &operator=(const HelloTriangleApplication &) = delete;
+  HelloTriangleApplication &operator=(HelloTriangleApplication &&) = delete;
+  HelloTriangleApplication(const HelloTriangleApplication &) = delete;
+  HelloTriangleApplication(HelloTriangleApplication &&) = delete;
+  // clang-format on
+
 private:
-  // Returns true iff all requested validation layers (in validationLayers) are
-  // available.
-  bool checkValidationLayerSupport() {
-    const auto availableLayers = vk::enumerateInstanceLayerProperties();
-
-    return std::ranges::all_of(validationLayers, [&](const char *layerName) {
-      return std::ranges::find_if(availableLayers, [&](const auto &layerProps) {
-               return std::strcmp(layerName, layerProps.layerName) == 0;
-             }) != availableLayers.end();
-    });
-  }
-
   // Initialized the GLFW window
-  void initWindow() {
+  static GLFWwindow* initWindow() {
     glfwInit();
 
     // Disable OpenGL in GLFW
@@ -64,14 +66,14 @@ private:
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     // Width, Height, window name, monitor, unused(OpenGL only)
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+    return glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
   }
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL
   debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
-                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-                [[maybe_unused]] void *pUserData) {
+                const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                [[maybe_unused]] void* pUserData) {
 
     std::cerr << "validation layer: " << pCallbackData->pMessage
               << "\n\tSeverity: " << messageSeverity
@@ -81,37 +83,18 @@ private:
   }
 
   // Get a list of Vulkan extensions required/requested by the application
-  std::vector<const char *> getRequiredExtensions() {
+  std::vector<const char*> getRequiredExtensions() {
     // Extensions are needed for GLFW, we can query GLFW to get this info
     std::uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions =
+    const char** glfwExtensions =
         glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char *> extensions(glfwExtensions,
-                                         glfwExtensions + glfwExtensionCount);
+    std::vector<const char*> extensions(glfwExtensions,
+                                        glfwExtensions + glfwExtensionCount);
 
     if constexpr (enableValidationLayers) {
       // Add "VK_EXT_debug_utils", macro is provided to prevent typos
       extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    const auto available_extensions =
-        vk::enumerateInstanceExtensionProperties();
-
-    // Vulkan will validate this for us, but just for fun:
-    const auto valid = std::ranges::all_of(
-        std::span{glfwExtensions, glfwExtensionCount},
-        [&](const auto &extension_name) {
-          return std::ranges::find_if(
-                     available_extensions, [&](const auto &extension) {
-                       return std::strcmp(extension.extensionName,
-                                          extension_name) == 0;
-                     }) != available_extensions.end();
-        });
-
-    if (!valid) {
-      throw std::runtime_error(
-          "Vulkan does not have all extensions necessary for glfw");
     }
 
     return extensions;
@@ -119,9 +102,9 @@ private:
 
   VkResult CreateDebugUtilsMessengerEXT(
       VkInstance instance,
-      const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-      const VkAllocationCallbacks *pAllocator,
-      VkDebugUtilsMessengerEXT *pDebugMessenger) {
+      const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+      const VkAllocationCallbacks* pAllocator,
+      VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
         instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -133,7 +116,7 @@ private:
 
   void DestroyDebugUtilsMessengerEXT(VkInstance instance,
                                      VkDebugUtilsMessengerEXT debugMessenger,
-                                     const VkAllocationCallbacks *pAllocator) {
+                                     const VkAllocationCallbacks* pAllocator) {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
         instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -142,7 +125,7 @@ private:
   }
 
   void populateDebugMessengerCreateInfo(
-      VkDebugUtilsMessengerCreateInfoEXT &createInfo) {
+      VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     createInfo.messageSeverity =
@@ -155,12 +138,23 @@ private:
     createInfo.pfnUserCallback = debugCallback;
   }
 
+  constexpr static vk::DebugUtilsMessengerCreateInfoEXT
+  createDebugMessengerCreateInfo() {
+    using enum vk::DebugUtilsMessageSeverityFlagBitsEXT;
+    using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
+    return {
+        .messageSeverity = eVerbose | eWarning | eError,
+        .messageType = eGeneral | eValidation | ePerformance,
+        .pfnUserCallback = debugCallback,
+    };
+  }
+
   void setupDebugMessenger() {
     if constexpr (enableValidationLayers) {
       VkDebugUtilsMessengerCreateInfoEXT createInfo{};
       populateDebugMessengerCreateInfo(createInfo);
 
-      if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr,
+      if (CreateDebugUtilsMessengerEXT(*instance, &createInfo, nullptr,
                                        &debugMessenger) != VK_SUCCESS) {
         throw std::runtime_error("failed to set up debug messenger!");
       }
@@ -168,52 +162,38 @@ private:
   }
 
   // Creates the Vulkan instance
-  void createInstance() {
+  vk::raii::Instance createInstance() {
     // Set app info (optional)
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    const vk::ApplicationInfo appInfo{
+        .pApplicationName = "Hello Triangle",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "No Engine",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_0,
+    };
 
-    // Specify extensions and validation layers we want to use (mandatory)
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
+    const auto requiredExtensions = getRequiredExtensions();
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if constexpr (enableValidationLayers) {
-      if (!checkValidationLayerSupport()) {
-        throw std::runtime_error(
-            "validation layers requested, but not available!");
-      } else {
-        createInfo.enabledLayerCount =
-            static_cast<std::uint32_t>(validationLayers.size());
-        createInfo.ppEnabledLayerNames = validationLayers.data();
+      vk::StructureChain<vk::InstanceCreateInfo,
+                         vk::DebugUtilsMessengerCreateInfoEXT>
+          chain{vk::InstanceCreateInfo{.pApplicationInfo = &appInfo},
+                createDebugMessengerCreateInfo()};
 
-        populateDebugMessengerCreateInfo(debugCreateInfo);
-        createInfo.pNext =
-            (VkDebugUtilsMessengerCreateInfoEXT *)&debugCreateInfo;
+      auto& createInfo = chain.get<vk::InstanceCreateInfo>();
 
-        std::cerr << "validation layers enabled\n";
-      }
+      createInfo.setPEnabledExtensionNames(requiredExtensions);
+      createInfo.setPEnabledLayerNames(validationLayers);
+
+      std::cerr << "validation layers enabled\n";
+
+      return {context, createInfo};
     } else {
-      createInfo.enabledLayerCount = 0;
-      createInfo.pNext = nullptr;
-    }
+      vk::InstanceCreateInfo createInfo{.pApplicationInfo = &appInfo};
 
-    auto requiredExtensions = getRequiredExtensions();
+      createInfo.setPEnabledExtensionNames(requiredExtensions);
 
-    createInfo.enabledExtensionCount =
-        static_cast<std::uint32_t>(requiredExtensions.size());
-    createInfo.ppEnabledExtensionNames = requiredExtensions.data();
-
-    // Create the instance. Second parameter is for custom allocator callbacks,
-    // always nullptr for this tutorial.
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create instance!");
+      return {context, createInfo};
     }
   }
 
@@ -259,7 +239,7 @@ private:
     }
     */
     std::uint32_t i = 0;
-    for (const auto &queueFamily : queueFamilies) {
+    for (const auto& queueFamily : queueFamilies) {
       if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
         indices.graphicsFamily = i;
       }
@@ -295,7 +275,7 @@ private:
     std::set<std::string> requiredExtensions(deviceExtensions.begin(),
                                              deviceExtensions.end());
 
-    for (const auto &extension : availableExtensions) {
+    for (const auto& extension : availableExtensions) {
       requiredExtensions.erase(extension.extensionName);
     }
 
@@ -360,7 +340,7 @@ private:
               << '.' << VK_API_VERSION_MINOR(driverVersion) << '.'
               << VK_API_VERSION_MINOR(driverVersion) << '\n';
 
-    const char *deviceType = "unknown";
+    const char* deviceType = "unknown";
     switch (deviceProperties.deviceType) {
     case VK_PHYSICAL_DEVICE_TYPE_OTHER:
       deviceType = "other";
@@ -402,7 +382,7 @@ private:
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::span<const VkSurfaceFormatKHR> availableFormats) {
-    for (const auto &availableFormat : availableFormats) {
+    for (const auto& availableFormat : availableFormats) {
       if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
           availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
         return availableFormat;
@@ -414,7 +394,7 @@ private:
 
   VkPresentModeKHR chooseSwapPresentMode(
       const std::span<const VkPresentModeKHR> availablePresentModes) {
-    for (const auto &availablePresentMode : availablePresentModes) {
+    for (const auto& availablePresentMode : availablePresentModes) {
       if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
         return availablePresentMode;
       }
@@ -423,7 +403,7 @@ private:
     return VK_PRESENT_MODE_FIFO_KHR;
   }
 
-  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities) {
+  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
 
     if (capabilities.currentExtent.width !=
         std::numeric_limits<std::uint32_t>::max()) {
@@ -452,17 +432,17 @@ private:
   // Sets physicalDevice to a suitable device
   void pickPhysicalDevice() {
     std::uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    vkEnumeratePhysicalDevices(*instance, &deviceCount, nullptr);
 
     if (deviceCount == 0) {
       throw std::runtime_error("failed to find GPUs with Vulkan support!");
     }
 
     std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+    vkEnumeratePhysicalDevices(*instance, &deviceCount, devices.data());
 
     auto iter = std::ranges::find_if(
-        devices, [this](auto &device) { return isDeviceSuitable(device); });
+        devices, [this](auto& device) { return isDeviceSuitable(device); });
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
@@ -487,7 +467,7 @@ private:
     float queuePriority = 1.0f;
     std::uint32_t index = 0;
     for (std::uint32_t queueFamily : uniqueQueueFamilies) {
-      auto &queueCreateInfo = queueCreateInfos[index];
+      auto& queueCreateInfo = queueCreateInfos[index];
       queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
       queueCreateInfo.queueFamilyIndex = queueFamily;
       queueCreateInfo.queueCount = 1;
@@ -527,7 +507,7 @@ private:
   }
 
   void createSurface() {
-    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) !=
+    if (glfwCreateWindowSurface(*instance, window, nullptr, &surface) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create window surface!");
     }
@@ -641,7 +621,7 @@ private:
     }
   }
 
-  static std::vector<char> readFile(const std::string &filename) {
+  static std::vector<char> readFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {
@@ -657,11 +637,11 @@ private:
     return buffer;
   }
 
-  VkShaderModule createShaderModule(const std::vector<char> &code) {
+  VkShaderModule createShaderModule(const std::vector<char>& code) {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.codeSize = code.size();
-    createInfo.pCode = reinterpret_cast<const std::uint32_t *>(code.data());
+    createInfo.pCode = reinterpret_cast<const std::uint32_t*>(code.data());
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
@@ -1031,7 +1011,7 @@ private:
   }
 
   void initVulkan() {
-    createInstance();
+    // createInstance();
     setupDebugMessenger();
     createSurface();
     pickPhysicalDevice();
@@ -1126,7 +1106,7 @@ private:
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass(device, renderPass, nullptr);
 
-    for (auto &imageView : swapChainImageViews) {
+    for (auto& imageView : swapChainImageViews) {
       vkDestroyImageView(device, imageView, nullptr);
     }
 
@@ -1135,12 +1115,10 @@ private:
     vkDestroyDevice(device, nullptr);
 
     if constexpr (enableValidationLayers) {
-      DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+      DestroyDebugUtilsMessengerEXT(*instance, debugMessenger, nullptr);
     }
 
-    vkDestroySurfaceKHR(instance, surface, nullptr);
-
-    vkDestroyInstance(instance, nullptr);
+    vkDestroySurfaceKHR(*instance, surface, nullptr);
   }
 
   void cleanupWindow() {
@@ -1149,8 +1127,9 @@ private:
     glfwTerminate();
   }
 
-  GLFWwindow *window;
-  VkInstance instance;
+  GLFWwindow* window;
+  vk::raii::Context context;
+  vk::raii::Instance instance;
   VkDebugUtilsMessengerEXT debugMessenger;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
@@ -1178,7 +1157,7 @@ int main() {
 
   try {
     app.run();
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
   }
