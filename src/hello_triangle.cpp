@@ -35,7 +35,8 @@ constexpr bool enableValidationLayers = true;
 class HelloTriangleApplication {
 public:
   HelloTriangleApplication()
-      : window{initWindow()}, instance{createInstance()} {
+      : window{initWindow()}
+      , instance{createInstance()} {
     initVulkan();
   }
 
@@ -55,7 +56,7 @@ public:
 
 private:
   // Initialized the GLFW window
-  static GLFWwindow *initWindow() {
+  static GLFWwindow* initWindow() {
     glfwInit();
 
     // Disable OpenGL in GLFW
@@ -71,8 +72,8 @@ private:
   static VKAPI_ATTR VkBool32 VKAPI_CALL
   debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
-                const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-                [[maybe_unused]] void *pUserData) {
+                const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                [[maybe_unused]] void* pUserData) {
 
     std::cerr << "validation layer: " << pCallbackData->pMessage
               << "\n\tSeverity: " << messageSeverity
@@ -82,14 +83,14 @@ private:
   }
 
   // Get a list of Vulkan extensions required/requested by the application
-  std::vector<const char *> getRequiredExtensions() {
+  std::vector<const char*> getRequiredExtensions() {
     // Extensions are needed for GLFW, we can query GLFW to get this info
     std::uint32_t glfwExtensionCount = 0;
-    const char **glfwExtensions =
+    const char** glfwExtensions =
         glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    std::vector<const char *> extensions(glfwExtensions,
-                                         glfwExtensions + glfwExtensionCount);
+    std::vector<const char*> extensions(glfwExtensions,
+                                        glfwExtensions + glfwExtensionCount);
 
     if constexpr (enableValidationLayers) {
       // Add "VK_EXT_debug_utils", macro is provided to prevent typos
@@ -101,9 +102,9 @@ private:
 
   VkResult CreateDebugUtilsMessengerEXT(
       VkInstance instance,
-      const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-      const VkAllocationCallbacks *pAllocator,
-      VkDebugUtilsMessengerEXT *pDebugMessenger) {
+      const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+      const VkAllocationCallbacks* pAllocator,
+      VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
         instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -115,7 +116,7 @@ private:
 
   void DestroyDebugUtilsMessengerEXT(VkInstance instance,
                                      VkDebugUtilsMessengerEXT debugMessenger,
-                                     const VkAllocationCallbacks *pAllocator) {
+                                     const VkAllocationCallbacks* pAllocator) {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
         instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
@@ -124,7 +125,7 @@ private:
   }
 
   void populateDebugMessengerCreateInfo(
-      VkDebugUtilsMessengerCreateInfoEXT &createInfo) {
+      VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     createInfo.messageSeverity =
@@ -179,7 +180,7 @@ private:
           chain{vk::InstanceCreateInfo{.pApplicationInfo = &appInfo},
                 createDebugMessengerCreateInfo()};
 
-      auto &createInfo = chain.get<vk::InstanceCreateInfo>();
+      auto& createInfo = chain.get<vk::InstanceCreateInfo>();
 
       createInfo.setPEnabledExtensionNames(requiredExtensions);
       createInfo.setPEnabledLayerNames(validationLayers);
@@ -238,7 +239,7 @@ private:
     }
     */
     std::uint32_t i = 0;
-    for (const auto &queueFamily : queueFamilies) {
+    for (const auto& queueFamily : queueFamilies) {
       if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
         indices.graphicsFamily = i;
       }
@@ -274,7 +275,7 @@ private:
     std::set<std::string> requiredExtensions(deviceExtensions.begin(),
                                              deviceExtensions.end());
 
-    for (const auto &extension : availableExtensions) {
+    for (const auto& extension : availableExtensions) {
       requiredExtensions.erase(extension.extensionName);
     }
 
@@ -339,7 +340,7 @@ private:
               << '.' << VK_API_VERSION_MINOR(driverVersion) << '.'
               << VK_API_VERSION_MINOR(driverVersion) << '\n';
 
-    const char *deviceType = "unknown";
+    const char* deviceType = "unknown";
     switch (deviceProperties.deviceType) {
     case VK_PHYSICAL_DEVICE_TYPE_OTHER:
       deviceType = "other";
@@ -381,7 +382,7 @@ private:
 
   VkSurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::span<const VkSurfaceFormatKHR> availableFormats) {
-    for (const auto &availableFormat : availableFormats) {
+    for (const auto& availableFormat : availableFormats) {
       if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
           availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
         return availableFormat;
@@ -393,7 +394,7 @@ private:
 
   VkPresentModeKHR chooseSwapPresentMode(
       const std::span<const VkPresentModeKHR> availablePresentModes) {
-    for (const auto &availablePresentMode : availablePresentModes) {
+    for (const auto& availablePresentMode : availablePresentModes) {
       if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
         return availablePresentMode;
       }
@@ -402,7 +403,7 @@ private:
     return VK_PRESENT_MODE_FIFO_KHR;
   }
 
-  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities) {
+  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
 
     if (capabilities.currentExtent.width !=
         std::numeric_limits<std::uint32_t>::max()) {
@@ -441,7 +442,7 @@ private:
     vkEnumeratePhysicalDevices(*instance, &deviceCount, devices.data());
 
     auto iter = std::ranges::find_if(
-        devices, [this](auto &device) { return isDeviceSuitable(device); });
+        devices, [this](auto& device) { return isDeviceSuitable(device); });
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
@@ -466,7 +467,7 @@ private:
     float queuePriority = 1.0f;
     std::uint32_t index = 0;
     for (std::uint32_t queueFamily : uniqueQueueFamilies) {
-      auto &queueCreateInfo = queueCreateInfos[index];
+      auto& queueCreateInfo = queueCreateInfos[index];
       queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
       queueCreateInfo.queueFamilyIndex = queueFamily;
       queueCreateInfo.queueCount = 1;
@@ -620,7 +621,7 @@ private:
     }
   }
 
-  static std::vector<char> readFile(const std::string &filename) {
+  static std::vector<char> readFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {
@@ -636,11 +637,11 @@ private:
     return buffer;
   }
 
-  VkShaderModule createShaderModule(const std::vector<char> &code) {
+  VkShaderModule createShaderModule(const std::vector<char>& code) {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.codeSize = code.size();
-    createInfo.pCode = reinterpret_cast<const std::uint32_t *>(code.data());
+    createInfo.pCode = reinterpret_cast<const std::uint32_t*>(code.data());
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) !=
@@ -1105,7 +1106,7 @@ private:
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     vkDestroyRenderPass(device, renderPass, nullptr);
 
-    for (auto &imageView : swapChainImageViews) {
+    for (auto& imageView : swapChainImageViews) {
       vkDestroyImageView(device, imageView, nullptr);
     }
 
@@ -1126,7 +1127,7 @@ private:
     glfwTerminate();
   }
 
-  GLFWwindow *window;
+  GLFWwindow* window;
   vk::raii::Context context;
   vk::raii::Instance instance;
   VkDebugUtilsMessengerEXT debugMessenger;
@@ -1156,7 +1157,7 @@ int main() {
 
   try {
     app.run();
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
   }
