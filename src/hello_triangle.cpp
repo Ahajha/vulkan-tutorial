@@ -1,7 +1,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_raii.hpp>
 
 #include <algorithm>
 #include <array>
@@ -32,7 +34,10 @@ constexpr bool enableValidationLayers = true;
 
 class HelloTriangleApplication {
 public:
-  HelloTriangleApplication() : window{initWindow()} { initVulkan(); }
+  HelloTriangleApplication()
+      : window{initWindow()}, instance{createInstance()} {
+    initVulkan();
+  }
 
   void run() { mainLoop(); }
 
@@ -49,18 +54,6 @@ public:
   // clang-format on
 
 private:
-  // Returns true iff all requested validation layers (in validationLayers)
-  // are available.
-  bool checkValidationLayerSupport() {
-    const auto availableLayers = vk::enumerateInstanceLayerProperties();
-
-    return std::ranges::all_of(validationLayers, [&](const char *layerName) {
-      return std::ranges::find_if(availableLayers, [&](const auto &layerProps) {
-               return std::strcmp(layerName, layerProps.layerName) == 0;
-             }) != availableLayers.end();
-    });
-  }
-
   // Initialized the GLFW window
   static GLFWwindow *initWindow() {
     glfwInit();
@@ -101,25 +94,6 @@ private:
     if constexpr (enableValidationLayers) {
       // Add "VK_EXT_debug_utils", macro is provided to prevent typos
       extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    const auto available_extensions =
-        vk::enumerateInstanceExtensionProperties();
-
-    // Vulkan will validate this for us, but just for fun:
-    const auto valid = std::ranges::all_of(
-        std::span{glfwExtensions, glfwExtensionCount},
-        [&](const auto &extension_name) {
-          return std::ranges::find_if(
-                     available_extensions, [&](const auto &extension) {
-                       return std::strcmp(extension.extensionName,
-                                          extension_name) == 0;
-                     }) != available_extensions.end();
-        });
-
-    if (!valid) {
-      throw std::runtime_error(
-          "Vulkan does not have all extensions necessary for glfw");
     }
 
     return extensions;
@@ -163,12 +137,23 @@ private:
     createInfo.pfnUserCallback = debugCallback;
   }
 
+  constexpr static vk::DebugUtilsMessengerCreateInfoEXT
+  createDebugMessengerCreateInfo() {
+    using enum vk::DebugUtilsMessageSeverityFlagBitsEXT;
+    using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
+    return {
+        .messageSeverity = eVerbose | eWarning | eError,
+        .messageType = eGeneral | eValidation | ePerformance,
+        .pfnUserCallback = debugCallback,
+    };
+  }
+
   void setupDebugMessenger() {
     if constexpr (enableValidationLayers) {
       VkDebugUtilsMessengerCreateInfoEXT createInfo{};
       populateDebugMessengerCreateInfo(createInfo);
 
-      if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr,
+      if (CreateDebugUtilsMessengerEXT(*instance, &createInfo, nullptr,
                                        &debugMessenger) != VK_SUCCESS) {
         throw std::runtime_error("failed to set up debug messenger!");
       }
@@ -176,52 +161,38 @@ private:
   }
 
   // Creates the Vulkan instance
-  void createInstance() {
+  vk::raii::Instance createInstance() {
     // Set app info (optional)
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    const vk::ApplicationInfo appInfo{
+        .pApplicationName = "Hello Triangle",
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .pEngineName = "No Engine",
+        .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_0,
+    };
 
-    // Specify extensions and validation layers we want to use (mandatory)
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
+    const auto requiredExtensions = getRequiredExtensions();
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if constexpr (enableValidationLayers) {
-      if (!checkValidationLayerSupport()) {
-        throw std::runtime_error(
-            "validation layers requested, but not available!");
-      } else {
-        createInfo.enabledLayerCount =
-            static_cast<std::uint32_t>(validationLayers.size());
-        createInfo.ppEnabledLayerNames = validationLayers.data();
+      vk::StructureChain<vk::InstanceCreateInfo,
+                         vk::DebugUtilsMessengerCreateInfoEXT>
+          chain{vk::InstanceCreateInfo{.pApplicationInfo = &appInfo},
+                createDebugMessengerCreateInfo()};
 
-        populateDebugMessengerCreateInfo(debugCreateInfo);
-        createInfo.pNext =
-            (VkDebugUtilsMessengerCreateInfoEXT *)&debugCreateInfo;
+      auto &createInfo = chain.get<vk::InstanceCreateInfo>();
 
-        std::cerr << "validation layers enabled\n";
-      }
+      createInfo.setPEnabledExtensionNames(requiredExtensions);
+      createInfo.setPEnabledLayerNames(validationLayers);
+
+      std::cerr << "validation layers enabled\n";
+
+      return {context, createInfo};
     } else {
-      createInfo.enabledLayerCount = 0;
-      createInfo.pNext = nullptr;
-    }
+      vk::InstanceCreateInfo createInfo{.pApplicationInfo = &appInfo};
 
-    auto requiredExtensions = getRequiredExtensions();
+      createInfo.setPEnabledExtensionNames(requiredExtensions);
 
-    createInfo.enabledExtensionCount =
-        static_cast<std::uint32_t>(requiredExtensions.size());
-    createInfo.ppEnabledExtensionNames = requiredExtensions.data();
-
-    // Create the instance. Second parameter is for custom allocator callbacks,
-    // always nullptr for this tutorial.
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create instance!");
+      return {context, createInfo};
     }
   }
 
@@ -460,14 +431,14 @@ private:
   // Sets physicalDevice to a suitable device
   void pickPhysicalDevice() {
     std::uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    vkEnumeratePhysicalDevices(*instance, &deviceCount, nullptr);
 
     if (deviceCount == 0) {
       throw std::runtime_error("failed to find GPUs with Vulkan support!");
     }
 
     std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+    vkEnumeratePhysicalDevices(*instance, &deviceCount, devices.data());
 
     auto iter = std::ranges::find_if(
         devices, [this](auto &device) { return isDeviceSuitable(device); });
@@ -535,7 +506,7 @@ private:
   }
 
   void createSurface() {
-    if (glfwCreateWindowSurface(instance, window, nullptr, &surface) !=
+    if (glfwCreateWindowSurface(*instance, window, nullptr, &surface) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create window surface!");
     }
@@ -1039,7 +1010,7 @@ private:
   }
 
   void initVulkan() {
-    createInstance();
+    // createInstance();
     setupDebugMessenger();
     createSurface();
     pickPhysicalDevice();
@@ -1143,12 +1114,10 @@ private:
     vkDestroyDevice(device, nullptr);
 
     if constexpr (enableValidationLayers) {
-      DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+      DestroyDebugUtilsMessengerEXT(*instance, debugMessenger, nullptr);
     }
 
-    vkDestroySurfaceKHR(instance, surface, nullptr);
-
-    vkDestroyInstance(instance, nullptr);
+    vkDestroySurfaceKHR(*instance, surface, nullptr);
   }
 
   void cleanupWindow() {
@@ -1158,7 +1127,8 @@ private:
   }
 
   GLFWwindow *window;
-  VkInstance instance;
+  vk::raii::Context context;
+  vk::raii::Instance instance;
   VkDebugUtilsMessengerEXT debugMessenger;
   VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
   VkDevice device;
