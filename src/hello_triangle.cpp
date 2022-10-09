@@ -160,48 +160,19 @@ private:
     }
   };
 
-  QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+  QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device) {
     QueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
-    std::uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
-                                             nullptr);
+    const auto queueFamilies = device.getQueueFamilyProperties();
 
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,
-                                             queueFamilies.data());
-    /*
-    // Print queue info, for fun
-    for (const auto &qfamily : queueFamilies) {
-      std::cout << "Queue count: " << qfamily.queueCount << '\n';
-      std::cout << "Flags: ";
-      if (qfamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        std::cout << "Graphics ";
-      }
-      if (qfamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
-        std::cout << "Compute ";
-      }
-      if (qfamily.queueFlags & VK_QUEUE_TRANSFER_BIT) {
-        std::cout << "Transfer ";
-      }
-      if (qfamily.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
-        std::cout << "Sparse binding ";
-      }
-      std::cout << '\n';
-    }
-    */
     std::uint32_t i = 0;
     for (const auto& queueFamily : queueFamilies) {
-      if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+      if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
         indices.graphicsFamily = i;
       }
 
-      VkBool32 presentSupport = false;
-      vkGetPhysicalDeviceSurfaceSupportKHR(device, i, *surface,
-                                           &presentSupport);
-
-      if (presentSupport) {
+      if (device.getSurfaceSupportKHR(i, *surface)) {
         indices.presentFamily = i;
       }
 
@@ -217,14 +188,9 @@ private:
 
   // Returns true if deviceExtensions is a subset of the available device
   // extensions.
-  bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
-    std::uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
-                                         nullptr);
-
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount,
-                                         availableExtensions.data());
+  bool checkDeviceExtensionSupport(const vk::raii::PhysicalDevice& device) {
+    const auto availableExtensions =
+        device.enumerateDeviceExtensionProperties();
 
     std::set<std::string> requiredExtensions(deviceExtensions.begin(),
                                              deviceExtensions.end());
@@ -241,6 +207,18 @@ private:
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
+  };
+
+  struct SwapChainSupportDetails2 {
+    SwapChainSupportDetails2(const vk::raii::PhysicalDevice& device,
+                             const vk::raii::SurfaceKHR& surface)
+        : capabilities{device.getSurfaceCapabilitiesKHR(*surface)}
+        , formats{device.getSurfaceFormatsKHR(*surface)}
+        , presentModes{device.getSurfacePresentModesKHR(*surface)} {}
+
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> presentModes;
   };
 
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
@@ -275,58 +253,14 @@ private:
     return details;
   }
 
-  bool isDeviceSuitable(VkPhysicalDevice device) {
-    // Query properties
-    VkPhysicalDeviceProperties deviceProperties;
-    vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
-    // Print some info, for fun:
-    std::cout << "Device name: " << deviceProperties.deviceName << '\n';
-
-    const auto apiVersion = deviceProperties.apiVersion;
-    std::cout << "Vulkan version supported by device: "
-              << VK_API_VERSION_MAJOR(apiVersion) << '.'
-              << VK_API_VERSION_MINOR(apiVersion) << '.'
-              << VK_API_VERSION_MINOR(apiVersion) << '\n';
-
-    const auto driverVersion = deviceProperties.driverVersion;
-    std::cout << "Driver version: " << VK_API_VERSION_MAJOR(driverVersion)
-              << '.' << VK_API_VERSION_MINOR(driverVersion) << '.'
-              << VK_API_VERSION_MINOR(driverVersion) << '\n';
-
-    const char* deviceType = "unknown";
-    switch (deviceProperties.deviceType) {
-    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
-      deviceType = "other";
-      break;
-    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-      deviceType = "integrated";
-      break;
-    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-      deviceType = "discrete";
-      break;
-    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-      deviceType = "virtual";
-      break;
-    case VK_PHYSICAL_DEVICE_TYPE_CPU:
-      deviceType = "cpu";
-      break;
-    case VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM:
-      break;
-    }
-    std::cout << "Device type: " << deviceType << '\n';
-
-    // Query features (Currently unneeded)
-    // VkPhysicalDeviceFeatures deviceFeatures;
-    // vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
-    auto indices = findQueueFamilies(device);
+  bool isDeviceSuitable(const vk::raii::PhysicalDevice& device) {
+    auto indices = findQueueFamilies(*device);
 
     const bool extensionsSupported = checkDeviceExtensionSupport(device);
 
     bool swapChainAdequate = false;
     if (extensionsSupported) {
-      SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+      auto swapChainSupport = SwapChainSupportDetails2(device, surface);
       swapChainAdequate = !swapChainSupport.formats.empty() &&
                           !swapChainSupport.presentModes.empty();
     }
@@ -388,7 +322,7 @@ private:
     const auto devices = instance.enumeratePhysicalDevices();
 
     auto iter = std::ranges::find_if(
-        devices, [this](auto& device) { return isDeviceSuitable(*device); });
+        devices, [this](auto& device) { return isDeviceSuitable(device); });
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
@@ -959,7 +893,6 @@ private:
   }
 
   void initVulkan() {
-    // pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
     createImageViews();
