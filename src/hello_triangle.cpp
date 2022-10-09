@@ -32,10 +32,7 @@ constexpr bool enableValidationLayers = true;
 
 class HelloTriangleApplication {
 public:
-  HelloTriangleApplication() {
-    initWindow();
-    initVulkan();
-  }
+  HelloTriangleApplication() : window{initWindow()} { initVulkan(); }
 
   void run() { mainLoop(); }
 
@@ -65,7 +62,7 @@ private:
   }
 
   // Initialized the GLFW window
-  void initWindow() {
+  static GLFWwindow *initWindow() {
     glfwInit();
 
     // Disable OpenGL in GLFW
@@ -75,7 +72,7 @@ private:
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     // Width, Height, window name, monitor, unused(OpenGL only)
-    window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+    return glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
   }
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL
