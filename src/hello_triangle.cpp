@@ -32,17 +32,28 @@ constexpr bool enableValidationLayers = true;
 
 class HelloTriangleApplication {
 public:
-  void run() {
+  HelloTriangleApplication() {
     initWindow();
     initVulkan();
-    mainLoop();
+  }
+
+  void run() { mainLoop(); }
+
+  ~HelloTriangleApplication() {
     cleanupVulkan();
     cleanupWindow();
   }
 
+  // clang-format off
+  HelloTriangleApplication &operator=(const HelloTriangleApplication &) = delete;
+  HelloTriangleApplication &operator=(HelloTriangleApplication &&) = delete;
+  HelloTriangleApplication(const HelloTriangleApplication &) = delete;
+  HelloTriangleApplication(HelloTriangleApplication &&) = delete;
+  // clang-format on
+
 private:
-  // Returns true iff all requested validation layers (in validationLayers) are
-  // available.
+  // Returns true iff all requested validation layers (in validationLayers)
+  // are available.
   bool checkValidationLayerSupport() {
     const auto availableLayers = vk::enumerateInstanceLayerProperties();
 
