@@ -38,7 +38,8 @@ public:
       : window{initWindow()}
       , instance{createInstance()}
       , debugMessenger{instance, createDebugMessengerCreateInfo()}
-      , surface{createSurface()} {
+      , surface{createSurface()}
+      , physicalDevice{pickPhysicalDevice()} {
     initVulkan();
   }
 
@@ -382,30 +383,22 @@ private:
     }
   }
 
-  // Sets physicalDevice to a suitable device
-  void pickPhysicalDevice() {
-    std::uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(*instance, &deviceCount, nullptr);
-
-    if (deviceCount == 0) {
-      throw std::runtime_error("failed to find GPUs with Vulkan support!");
-    }
-
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(*instance, &deviceCount, devices.data());
+  // Returns a suitable physical device
+  [[nodiscard]] vk::raii::PhysicalDevice pickPhysicalDevice() {
+    const auto devices = instance.enumeratePhysicalDevices();
 
     auto iter = std::ranges::find_if(
-        devices, [this](auto& device) { return isDeviceSuitable(device); });
+        devices, [this](auto& device) { return isDeviceSuitable(*device); });
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
     }
 
-    physicalDevice = *iter;
+    return *iter;
   }
 
   void createLogicalDevice() {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    QueueFamilyIndices indices = findQueueFamilies(*physicalDevice);
 
     std::cout << "Graphics queue family index: "
               << indices.graphicsFamily.value() << '\n';
@@ -450,7 +443,7 @@ private:
       createInfo.enabledLayerCount = 0;
     }
 
-    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) !=
+    if (vkCreateDevice(*physicalDevice, &createInfo, nullptr, &device) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create logical device!");
     }
@@ -470,7 +463,7 @@ private:
 
   void createSwapChain() {
     SwapChainSupportDetails swapChainSupport =
-        querySwapChainSupport(physicalDevice);
+        querySwapChainSupport(*physicalDevice);
 
     VkSurfaceFormatKHR surfaceFormat =
         chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -499,7 +492,7 @@ private:
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    QueueFamilyIndices indices = findQueueFamilies(*physicalDevice);
     std::uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(),
                                           indices.presentFamily.value()};
 
@@ -864,7 +857,7 @@ private:
   }
 
   void createCommandPool() {
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(*physicalDevice);
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -966,7 +959,7 @@ private:
   }
 
   void initVulkan() {
-    pickPhysicalDevice();
+    // pickPhysicalDevice();
     createLogicalDevice();
     createSwapChain();
     createImageViews();
@@ -1078,7 +1071,7 @@ private:
   vk::raii::Instance instance;
   vk::raii::DebugUtilsMessengerEXT debugMessenger;
   vk::raii::SurfaceKHR surface;
-  VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+  vk::raii::PhysicalDevice physicalDevice;
   VkDevice device;
   VkQueue graphicsQueue;
   VkQueue presentQueue;
