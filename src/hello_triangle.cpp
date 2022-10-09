@@ -45,7 +45,6 @@ private:
   // available.
   bool checkValidationLayerSupport() {
     const auto availableLayers = vk::enumerateInstanceLayerProperties();
-    // vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
     return std::ranges::all_of(validationLayers, [&](const char *layerName) {
       return std::ranges::find_if(availableLayers, [&](const auto &layerProps) {
