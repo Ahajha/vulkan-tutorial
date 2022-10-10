@@ -298,7 +298,7 @@ private:
     const auto devices = instance.enumeratePhysicalDevices();
 
     auto iter = std::ranges::find_if(
-        devices, [this](auto& device) { return isDeviceSuitable(device); });
+        devices, [this](auto& device) { return isDeviceSuitable(*device); });
 
     if (iter == devices.end()) {
       throw std::runtime_error("failed to find a suitable GPU!");
