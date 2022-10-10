@@ -39,7 +39,11 @@ public:
       , instance{createInstance()}
       , debugMessenger{instance, createDebugMessengerCreateInfo()}
       , surface{createSurface()}
-      , physicalDevice{pickPhysicalDevice()} {
+      , physicalDevice{pickPhysicalDevice()}
+      // We unwrap this result, we are guaranteed this will succeed since we
+      // validated that all the requested queues are available.
+      , queueFamilyIndices{
+            findQueueFamilies(*physicalDevice).finalize().value()} {
     initVulkan();
   }
 
@@ -151,17 +155,32 @@ private:
   }
 
   struct QueueFamilyIndices {
-    // The queue index that supports graphics
+    std::uint32_t graphicsFamily;
+    std::uint32_t presentFamily;
+  };
+
+  struct OptionalQueueFamilyIndices {
     std::optional<std::uint32_t> graphicsFamily;
     std::optional<std::uint32_t> presentFamily;
 
     bool isComplete() const {
       return graphicsFamily.has_value() && presentFamily.has_value();
     }
+
+    std::optional<QueueFamilyIndices> finalize() const {
+      if (isComplete()) {
+        return QueueFamilyIndices{
+            .graphicsFamily = *(this->graphicsFamily),
+            .presentFamily = *(this->presentFamily),
+        };
+      } else {
+        return {};
+      }
+    }
   };
 
-  QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device) {
-    QueueFamilyIndices indices;
+  OptionalQueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device) {
+    OptionalQueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
     const auto queueFamilies = device.getQueueFamilyProperties();
@@ -295,15 +314,13 @@ private:
   }
 
   void createLogicalDevice() {
-    QueueFamilyIndices indices = findQueueFamilies(*physicalDevice);
-
     std::cout << "Graphics queue family index: "
-              << indices.graphicsFamily.value() << '\n';
-    std::cout << "Present queue family index: " << indices.presentFamily.value()
-              << '\n';
+              << queueFamilyIndices.graphicsFamily << '\n';
+    std::cout << "Present queue family index: "
+              << queueFamilyIndices.presentFamily << '\n';
 
     std::set<std::uint32_t> uniqueQueueFamilies = {
-        indices.graphicsFamily.value(), indices.presentFamily.value()};
+        queueFamilyIndices.graphicsFamily, queueFamilyIndices.presentFamily};
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos(
         uniqueQueueFamilies.size());
 
@@ -345,8 +362,10 @@ private:
       throw std::runtime_error("failed to create logical device!");
     }
 
-    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
-    vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+    vkGetDeviceQueue(device, queueFamilyIndices.graphicsFamily, 0,
+                     &graphicsQueue);
+    vkGetDeviceQueue(device, queueFamilyIndices.presentFamily, 0,
+                     &presentQueue);
   }
 
   [[nodiscard]] vk::raii::SurfaceKHR createSurface() {
@@ -388,17 +407,16 @@ private:
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    QueueFamilyIndices indices = findQueueFamilies(*physicalDevice);
-    std::uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(),
-                                          indices.presentFamily.value()};
+    std::uint32_t queueFamilyIndicesArray[] = {
+        queueFamilyIndices.graphicsFamily, queueFamilyIndices.presentFamily};
 
     // We will draw images on the graphics queue, then present them with the
     // present queue. So we need to tell vulkan to enable concurrency between
     // two queues, if they differ.
-    if (indices.graphicsFamily != indices.presentFamily) {
+    if (queueFamilyIndices.graphicsFamily != queueFamilyIndices.presentFamily) {
       createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
       createInfo.queueFamilyIndexCount = 2;
-      createInfo.pQueueFamilyIndices = queueFamilyIndices;
+      createInfo.pQueueFamilyIndices = queueFamilyIndicesArray;
     } else {
       createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
       createInfo.queueFamilyIndexCount = 0;     // Optional
@@ -754,14 +772,12 @@ private:
   }
 
   void createCommandPool() {
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(*physicalDevice);
-
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 
     // Allow command buffers to be rerecorded individually
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
 
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) !=
         VK_SUCCESS) {
@@ -968,6 +984,7 @@ private:
   vk::raii::DebugUtilsMessengerEXT debugMessenger;
   vk::raii::SurfaceKHR surface;
   vk::raii::PhysicalDevice physicalDevice;
+  QueueFamilyIndices queueFamilyIndices;
   VkDevice device;
   VkQueue graphicsQueue;
   VkQueue presentQueue;
