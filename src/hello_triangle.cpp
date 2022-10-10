@@ -235,18 +235,13 @@ private:
   };
 
   bool isDeviceSuitable(const vk::raii::PhysicalDevice& device) {
-    auto indices = findQueueFamilies(*device);
+    if (!findQueueFamilies(*device).isComplete() ||
+        !checkDeviceExtensionSupport(*device))
+      return false;
 
-    const bool extensionsSupported = checkDeviceExtensionSupport(*device);
-
-    bool swapChainAdequate = false;
-    if (extensionsSupported) {
-      auto swapChainSupport = SwapChainSupportDetails(device, surface);
-      swapChainAdequate = !swapChainSupport.formats.empty() &&
-                          !swapChainSupport.presentModes.empty();
-    }
-
-    return indices.isComplete() && extensionsSupported && swapChainAdequate;
+    const auto swapChainSupport = SwapChainSupportDetails(device, surface);
+    return !swapChainSupport.formats.empty() &&
+           !swapChainSupport.presentModes.empty();
   }
 
   vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
