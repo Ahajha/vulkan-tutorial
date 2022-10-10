@@ -283,19 +283,17 @@ private:
       int width, height;
       glfwGetFramebufferSize(window, &width, &height);
 
-      vk::Extent2D actualExtent = {static_cast<std::uint32_t>(width),
-                                   static_cast<std::uint32_t>(height)};
+      const auto [minWidth, minHeight] = capabilities.minImageExtent;
+      const auto [maxWidth, maxHeight] = capabilities.maxImageExtent;
 
       // Bound dimensions between the allowed min and max supported by the
       // implementation.
-      actualExtent.width =
-          std::clamp(actualExtent.width, capabilities.minImageExtent.width,
-                     capabilities.maxImageExtent.width);
-      actualExtent.height =
-          std::clamp(actualExtent.height, capabilities.minImageExtent.height,
-                     capabilities.maxImageExtent.height);
-
-      return actualExtent;
+      // clang-format off
+      return {
+          .width = std::clamp(static_cast<std::uint32_t>(width), minWidth, maxWidth),
+          .height = std::clamp(static_cast<std::uint32_t>(height), minHeight, maxHeight),
+      };
+      // clang-format on
     }
   }
 
