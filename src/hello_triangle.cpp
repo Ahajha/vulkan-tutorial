@@ -250,25 +250,26 @@ private:
 
   [[nodiscard]] vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::span<const vk::SurfaceFormatKHR> availableFormats) {
-    for (const auto& availableFormat : availableFormats) {
-      if (availableFormat.format == vk::Format::eB8G8R8A8Srgb &&
-          availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-        return availableFormat;
-      }
-    }
+    const vk::SurfaceFormatKHR desiredFormat{
+        .format = vk::Format::eB8G8R8A8Srgb,
+        .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear,
+    };
 
-    return availableFormats[0];
+    const auto iter = std::ranges::find(availableFormats, desiredFormat);
+
+    return iter != availableFormats.end() ? desiredFormat
+                                          : availableFormats.front();
   }
 
   [[nodiscard]] vk::PresentModeKHR chooseSwapPresentMode(
       const std::span<const vk::PresentModeKHR> availablePresentModes) {
-    for (const auto& availablePresentMode : availablePresentModes) {
-      if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
-        return availablePresentMode;
-      }
-    }
+    const vk::PresentModeKHR desiredPresentMode = vk::PresentModeKHR::eMailbox;
 
-    return vk::PresentModeKHR::eFifo;
+    const auto iter =
+        std::ranges::find(availablePresentModes, desiredPresentMode);
+
+    return iter != availablePresentModes.end() ? desiredPresentMode
+                                               : vk::PresentModeKHR::eFifo;
   }
 
   [[nodiscard]] vk::Extent2D
