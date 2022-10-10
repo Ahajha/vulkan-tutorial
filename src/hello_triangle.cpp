@@ -223,23 +223,22 @@ private:
 
   // Contains information about swap chain support for a given physical device
   struct SwapChainSupportDetails {
-    SwapChainSupportDetails(const vk::raii::PhysicalDevice& device,
-                            const vk::raii::SurfaceKHR& surface)
-        : capabilities{device.getSurfaceCapabilitiesKHR(*surface)}
-        , formats{device.getSurfaceFormatsKHR(*surface)}
-        , presentModes{device.getSurfacePresentModesKHR(*surface)} {}
+    SwapChainSupportDetails(vk::PhysicalDevice device, vk::SurfaceKHR surface)
+        : capabilities{device.getSurfaceCapabilitiesKHR(surface)}
+        , formats{device.getSurfaceFormatsKHR(surface)}
+        , presentModes{device.getSurfacePresentModesKHR(surface)} {}
 
     vk::SurfaceCapabilitiesKHR capabilities;
     std::vector<vk::SurfaceFormatKHR> formats;
     std::vector<vk::PresentModeKHR> presentModes;
   };
 
-  bool isDeviceSuitable(const vk::raii::PhysicalDevice& device) {
-    if (!findQueueFamilies(*device).isComplete() ||
-        !checkDeviceExtensionSupport(*device))
+  bool isDeviceSuitable(vk::PhysicalDevice device) {
+    if (!findQueueFamilies(device).isComplete() ||
+        !checkDeviceExtensionSupport(device))
       return false;
 
-    const auto swapChainSupport = SwapChainSupportDetails(device, surface);
+    const auto swapChainSupport = SwapChainSupportDetails(device, *surface);
     return !swapChainSupport.formats.empty() &&
            !swapChainSupport.presentModes.empty();
   }
@@ -374,7 +373,7 @@ private:
 
   void createSwapChain() {
     const auto swapChainSupport =
-        SwapChainSupportDetails(physicalDevice, surface);
+        SwapChainSupportDetails(*physicalDevice, *surface);
 
     auto surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     auto presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
