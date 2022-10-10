@@ -67,7 +67,7 @@ public:
 
 private:
   // Initialized the GLFW window
-  static GLFWwindow* initWindow() {
+  [[nodiscard]] static GLFWwindow* initWindow() {
     glfwInit();
 
     // Disable OpenGL in GLFW
@@ -94,7 +94,7 @@ private:
   }
 
   // Get a list of Vulkan extensions required/requested by the application
-  std::vector<const char*> getRequiredExtensions() {
+  [[nodiscard]] static std::vector<const char*> getRequiredExtensions() {
     // Extensions are needed for GLFW, we can query GLFW to get this info
     std::uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions =
@@ -111,7 +111,7 @@ private:
     return extensions;
   }
 
-  constexpr static vk::DebugUtilsMessengerCreateInfoEXT
+  [[nodiscard]] constexpr static vk::DebugUtilsMessengerCreateInfoEXT
   createDebugMessengerCreateInfo() {
     using enum vk::DebugUtilsMessageSeverityFlagBitsEXT;
     using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
@@ -123,7 +123,7 @@ private:
   }
 
   // Creates the Vulkan instance
-  vk::raii::Instance createInstance() {
+  [[nodiscard]] vk::raii::Instance createInstance() {
     // Set app info (optional)
     const vk::ApplicationInfo appInfo{
         .pApplicationName = "Hello Triangle",
@@ -167,11 +167,11 @@ private:
     std::optional<std::uint32_t> graphicsFamily;
     std::optional<std::uint32_t> presentFamily;
 
-    bool isComplete() const {
+    [[nodiscard]] bool isComplete() const {
       return graphicsFamily.has_value() && presentFamily.has_value();
     }
 
-    std::optional<QueueFamilyIndices> finalize() const {
+    [[nodiscard]] std::optional<QueueFamilyIndices> finalize() const {
       if (isComplete()) {
         return QueueFamilyIndices{
             .graphicsFamily = *(this->graphicsFamily),
@@ -183,7 +183,8 @@ private:
     }
   };
 
-  OptionalQueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device) {
+  [[nodiscard]] OptionalQueueFamilyIndices
+  findQueueFamilies(vk::PhysicalDevice device) {
     OptionalQueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
@@ -211,7 +212,7 @@ private:
 
   // Returns true if deviceExtensions is a subset of the available device
   // extensions.
-  bool checkDeviceExtensionSupport(vk::PhysicalDevice device) {
+  [[nodiscard]] bool checkDeviceExtensionSupport(vk::PhysicalDevice device) {
     const auto availableExtensions =
         device.enumerateDeviceExtensionProperties();
 
@@ -247,7 +248,7 @@ private:
            !swapChainSupport.presentModes.empty();
   }
 
-  vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
+  [[nodiscard]] vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::span<const vk::SurfaceFormatKHR> availableFormats) {
     for (const auto& availableFormat : availableFormats) {
       if (availableFormat.format == vk::Format::eB8G8R8A8Srgb &&
@@ -259,7 +260,7 @@ private:
     return availableFormats[0];
   }
 
-  vk::PresentModeKHR chooseSwapPresentMode(
+  [[nodiscard]] vk::PresentModeKHR chooseSwapPresentMode(
       const std::span<const vk::PresentModeKHR> availablePresentModes) {
     for (const auto& availablePresentMode : availablePresentModes) {
       if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
@@ -270,7 +271,7 @@ private:
     return vk::PresentModeKHR::eFifo;
   }
 
-  vk::Extent2D
+  [[nodiscard]] vk::Extent2D
   chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
 
     if (capabilities.currentExtent.width !=
