@@ -48,7 +48,8 @@ public:
       , device{createLogicalDevice()}
       , graphicsQueue{device.getQueue(queueFamilyIndices.graphicsFamily, 0)}
       , presentQueue{device.getQueue(queueFamilyIndices.presentFamily, 0)}
-      , swapChainAggregate{createSwapChain()} {
+      , swapChainAggregate{createSwapChain()}
+      , swapChainImageViews{createImageViews()} {
     initVulkan();
   }
 
@@ -425,32 +426,36 @@ private:
     };
   }
 
-  void createImageViews() {
-    swapChainImageViews.resize(swapChainAggregate.images.size());
+  [[nodiscard]] std::vector<vk::raii::ImageView> createImageViews() const {
+    std::vector<vk::raii::ImageView> swapChainImageViews;
+    swapChainImageViews.reserve(swapChainAggregate.images.size());
 
-    for (std::size_t i = 0; i < swapChainAggregate.images.size(); i++) {
-      VkImageViewCreateInfo createInfo{};
-      createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-      createInfo.image = static_cast<VkImage>(swapChainAggregate.images[i]);
-      createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      createInfo.format = static_cast<VkFormat>(swapChainAggregate.format);
+    for (const auto& image : swapChainAggregate.images) {
+      const vk::ImageViewCreateInfo createInfo{
+          .image = image,
+          .viewType = vk::ImageViewType::e2D,
+          .format = swapChainAggregate.format,
+          .components =
+              {
+                  .r = vk::ComponentSwizzle::eIdentity,
+                  .g = vk::ComponentSwizzle::eIdentity,
+                  .b = vk::ComponentSwizzle::eIdentity,
+                  .a = vk::ComponentSwizzle::eIdentity,
+              },
+          .subresourceRange =
+              {
+                  .aspectMask = vk::ImageAspectFlagBits::eColor,
+                  .baseMipLevel = 0,
+                  .levelCount = 1,
+                  .baseArrayLayer = 0,
+                  .layerCount = 1,
+              },
+      };
 
-      createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-      createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-      createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-      createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-      createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      createInfo.subresourceRange.baseMipLevel = 0;
-      createInfo.subresourceRange.levelCount = 1;
-      createInfo.subresourceRange.baseArrayLayer = 0;
-      createInfo.subresourceRange.layerCount = 1;
-
-      if (vkCreateImageView(*device, &createInfo, nullptr,
-                            &swapChainImageViews[i]) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create image views!");
-      }
+      swapChainImageViews.emplace_back(device, createInfo);
     }
+
+    return swapChainImageViews;
   }
 
   static std::vector<char> readFile(const std::string& filename) {
@@ -722,7 +727,7 @@ private:
     swapChainFramebuffers.resize(swapChainImageViews.size());
 
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-      VkImageView attachments[] = {swapChainImageViews[i]};
+      VkImageView attachments[] = {*(swapChainImageViews[i])};
 
       VkFramebufferCreateInfo framebufferInfo{};
       framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -841,7 +846,6 @@ private:
   }
 
   void initVulkan() {
-    createImageViews();
     createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
@@ -929,10 +933,6 @@ private:
     vkDestroyPipeline(*device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(*device, pipelineLayout, nullptr);
     vkDestroyRenderPass(*device, renderPass, nullptr);
-
-    for (auto& imageView : swapChainImageViews) {
-      vkDestroyImageView(*device, imageView, nullptr);
-    }
   }
 
   void cleanupWindow() {
@@ -952,7 +952,7 @@ private:
   vk::raii::Queue graphicsQueue;
   vk::raii::Queue presentQueue;
   SwapChainAggreggate swapChainAggregate;
-  std::vector<VkImageView> swapChainImageViews;
+  std::vector<vk::raii::ImageView> swapChainImageViews;
   VkRenderPass renderPass;
   VkPipelineLayout pipelineLayout;
   VkPipeline graphicsPipeline;
