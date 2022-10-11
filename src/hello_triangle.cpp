@@ -49,7 +49,8 @@ public:
       , graphicsQueue{device.getQueue(queueFamilyIndices.graphicsFamily, 0)}
       , presentQueue{device.getQueue(queueFamilyIndices.presentFamily, 0)}
       , swapChainAggregate{createSwapChain()}
-      , swapChainImageViews{createImageViews()} {
+      , swapChainImageViews{createImageViews()}
+      , renderPass{createRenderPass()} {
     initVulkan();
   }
 
@@ -484,59 +485,55 @@ private:
     return {device, createInfo};
   }
 
-  void createRenderPass() {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = static_cast<VkFormat>(swapChainAggregate.format);
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  [[nodiscard]] vk::raii::RenderPass createRenderPass() {
+    const vk::AttachmentDescription colorAttachment{
+        .format = swapChainAggregate.format,
+        .samples = vk::SampleCountFlagBits::e1,
 
-    // Clear to black on load, and the value will be readable afterwards
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        // Clear to black on load, and the value will be readable afterwards
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
 
-    // We're not using stencils, so we don't care what happens before or after
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        // We're not using stencils, so we don't care what
+        // happens before or after
+        .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
+        .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
 
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        .initialLayout = vk::ImageLayout::eUndefined,
+        .finalLayout = vk::ImageLayout::ePresentSrcKHR,
+    };
 
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    const vk::AttachmentReference colorAttachmentRef{
+        .attachment = 0,
+        .layout = vk::ImageLayout::eColorAttachmentOptimal,
+    };
 
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &colorAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
+    vk::SubpassDescription subpass{
+        .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
+    };
+    subpass.setColorAttachments(colorAttachmentRef);
 
     // Declare our single subpass to be dependent on the implicit beginning
     // subpass
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
+    const vk::SubpassDependency dependency{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
 
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
+        .srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
+        .dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput,
 
-    // Wait for the swap chain to finish reading from the image before we can
-    // access it.
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        // Wait for the swap chain to finish reading from the image before we
+        // can access it.
+        .srcAccessMask = vk::AccessFlagBits::eNone,
+        .dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite,
+    };
 
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
+    vk::RenderPassCreateInfo renderPassInfo;
+    renderPassInfo.setAttachments(colorAttachment);
+    renderPassInfo.setSubpasses(subpass);
+    renderPassInfo.setDependencies(dependency);
 
-    if (vkCreateRenderPass(*device, &renderPassInfo, nullptr, &renderPass) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create render pass!");
-    }
+    return {device, renderPassInfo};
   }
 
   void createGraphicsPipeline() {
@@ -703,7 +700,7 @@ private:
 
     pipelineInfo.layout = pipelineLayout;
 
-    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.renderPass = *renderPass;
     pipelineInfo.subpass = 0;
 
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
@@ -723,7 +720,7 @@ private:
 
       VkFramebufferCreateInfo framebufferInfo{};
       framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-      framebufferInfo.renderPass = renderPass;
+      framebufferInfo.renderPass = *renderPass;
       framebufferInfo.attachmentCount = 1;
       framebufferInfo.pAttachments = attachments;
       framebufferInfo.width = swapChainAggregate.extent.width;
@@ -764,7 +761,7 @@ private:
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = renderPass;
+    renderPassInfo.renderPass = *renderPass;
     renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
 
     renderPassInfo.renderArea.offset = {0, 0};
@@ -838,7 +835,6 @@ private:
   }
 
   void initVulkan() {
-    createRenderPass();
     createGraphicsPipeline();
     createFramebuffers();
     createCommandPool();
@@ -924,7 +920,6 @@ private:
 
     vkDestroyPipeline(*device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(*device, pipelineLayout, nullptr);
-    vkDestroyRenderPass(*device, renderPass, nullptr);
   }
 
   void cleanupWindow() {
@@ -945,7 +940,7 @@ private:
   vk::raii::Queue presentQueue;
   SwapChainAggreggate swapChainAggregate;
   std::vector<vk::raii::ImageView> swapChainImageViews;
-  VkRenderPass renderPass;
+  vk::raii::RenderPass renderPass;
   VkPipelineLayout pipelineLayout;
   VkPipeline graphicsPipeline;
   std::vector<VkFramebuffer> swapChainFramebuffers;
