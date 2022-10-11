@@ -47,7 +47,8 @@ public:
                                .value()}
       , device{createLogicalDevice()}
       , graphicsQueue{device.getQueue(queueFamilyIndices.graphicsFamily, 0)}
-      , presentQueue{device.getQueue(queueFamilyIndices.presentFamily, 0)} {
+      , presentQueue{device.getQueue(queueFamilyIndices.presentFamily, 0)}
+      , swapChainAggregate{createSwapChain()} {
     initVulkan();
   }
 
@@ -350,13 +351,21 @@ private:
     return {instance, native_surface};
   }
 
-  void createSwapChain() {
+  struct SwapChainAggreggate {
+    vk::raii::SwapchainKHR swapChain;
+    std::vector<vk::Image> images;
+    vk::Format format;
+    vk::Extent2D extent;
+  };
+
+  [[nodiscard]] SwapChainAggreggate createSwapChain() {
     const auto swapChainSupport =
         SwapChainSupportDetails(*physicalDevice, *surface);
-
-    auto surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    auto presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    auto extent = chooseSwapExtent(swapChainSupport.capabilities);
+    const auto surfaceFormat =
+        chooseSwapSurfaceFormat(swapChainSupport.formats);
+    const auto presentMode =
+        chooseSwapPresentMode(swapChainSupport.presentModes);
+    const auto extent = chooseSwapExtent(swapChainSupport.capabilities);
 
     // We should use 1 more than the minimum as a basic default, but make sure
     // this doesn't exceed the maximum.
@@ -368,76 +377,63 @@ private:
       imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
-    VkSwapchainCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = *surface;
+    vk::SwapchainCreateInfoKHR createInfo{
+        .surface = *surface,
+        .minImageCount = imageCount,
+        .imageFormat = surfaceFormat.format,
+        .imageColorSpace = surfaceFormat.colorSpace,
+        .imageExtent = extent,
+        .imageArrayLayers = 1,
+        .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+        // We can specify a certain transform be applied to images, we don't
+        // want any transformation here.
+        .preTransform = swapChainSupport.capabilities.currentTransform,
 
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = static_cast<VkFormat>(surfaceFormat.format);
-    createInfo.imageColorSpace =
-        static_cast<VkColorSpaceKHR>(surfaceFormat.colorSpace);
-    createInfo.imageExtent = static_cast<VkExtent2D>(extent);
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        // Something about the alpha channel and blending with other windows
+        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
 
-    std::uint32_t queueFamilyIndicesArray[] = {
+        .presentMode = presentMode,
+
+        // We don't care about obscured pixels
+        .clipped = true,
+
+        // Something about swap chain errors, will cover this later
+        .oldSwapchain = nullptr,
+    };
+
+    const std::uint32_t queueFamilyIndicesArray[] = {
         queueFamilyIndices.graphicsFamily, queueFamilyIndices.presentFamily};
 
     // We will draw images on the graphics queue, then present them with the
     // present queue. So we need to tell vulkan to enable concurrency between
     // two queues, if they differ.
     if (queueFamilyIndices.graphicsFamily != queueFamilyIndices.presentFamily) {
-      createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-      createInfo.queueFamilyIndexCount = 2;
-      createInfo.pQueueFamilyIndices = queueFamilyIndicesArray;
+      createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
+      createInfo.setQueueFamilyIndices(queueFamilyIndicesArray);
     } else {
-      createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-      createInfo.queueFamilyIndexCount = 0;     // Optional
-      createInfo.pQueueFamilyIndices = nullptr; // Optional
+      createInfo.imageSharingMode = vk::SharingMode::eExclusive;
     }
 
-    // We can specify a certain transform be applied to images, we don't want
-    // any transformation here.
-    createInfo.preTransform = static_cast<VkSurfaceTransformFlagBitsKHR>(
-        swapChainSupport.capabilities.currentTransform);
+    vk::raii::SwapchainKHR swapChain{device, createInfo};
+    std::vector<vk::Image> swapChainImages{swapChain.getImages()};
 
-    // Something about the alpha channel and blending with other windows
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-
-    createInfo.presentMode = static_cast<VkPresentModeKHR>(presentMode);
-
-    // We don't care about obscured pixels
-    createInfo.clipped = VK_TRUE;
-
-    // Something about swap chain errors, will cover this later
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-    if (vkCreateSwapchainKHR(*device, &createInfo, nullptr, &swapChain) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create swap chain!");
-    }
-
-    // We only specified a minimum swap chain size, so query the actual amount
-    // and resize.
-    vkGetSwapchainImagesKHR(*device, swapChain, &imageCount, nullptr);
-    swapChainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(*device, swapChain, &imageCount,
-                            swapChainImages.data());
-
-    // To be used later
-    swapChainImageFormat = static_cast<VkFormat>(surfaceFormat.format);
-    swapChainExtent = static_cast<VkExtent2D>(extent);
+    return {
+        .swapChain = std::move(swapChain),
+        .images = std::move(swapChainImages),
+        .format = surfaceFormat.format,
+        .extent = extent,
+    };
   }
 
   void createImageViews() {
-    swapChainImageViews.resize(swapChainImages.size());
+    swapChainImageViews.resize(swapChainAggregate.images.size());
 
-    for (std::size_t i = 0; i < swapChainImages.size(); i++) {
+    for (std::size_t i = 0; i < swapChainAggregate.images.size(); i++) {
       VkImageViewCreateInfo createInfo{};
       createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-      createInfo.image = swapChainImages[i];
+      createInfo.image = static_cast<VkImage>(swapChainAggregate.images[i]);
       createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      createInfo.format = swapChainImageFormat;
+      createInfo.format = static_cast<VkFormat>(swapChainAggregate.format);
 
       createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
       createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -490,7 +486,7 @@ private:
 
   void createRenderPass() {
     VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapChainImageFormat;
+    colorAttachment.format = static_cast<VkFormat>(swapChainAggregate.format);
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 
     // Clear to black on load, and the value will be readable afterwards
@@ -597,14 +593,14 @@ private:
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainExtent.width);
-    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.width = static_cast<float>(swapChainAggregate.extent.width);
+    viewport.height = static_cast<float>(swapChainAggregate.extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = swapChainExtent;
+    scissor.extent = swapChainAggregate.extent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -733,8 +729,8 @@ private:
       framebufferInfo.renderPass = renderPass;
       framebufferInfo.attachmentCount = 1;
       framebufferInfo.pAttachments = attachments;
-      framebufferInfo.width = swapChainExtent.width;
-      framebufferInfo.height = swapChainExtent.height;
+      framebufferInfo.width = swapChainAggregate.extent.width;
+      framebufferInfo.height = swapChainAggregate.extent.height;
       framebufferInfo.layers = 1;
 
       if (vkCreateFramebuffer(*device, &framebufferInfo, nullptr,
@@ -775,7 +771,7 @@ private:
     renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
 
     renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = swapChainExtent;
+    renderPassInfo.renderArea.extent = swapChainAggregate.extent;
 
     // Set background color to black, 100% opacity
     VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
@@ -791,15 +787,15 @@ private:
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainExtent.width);
-    viewport.height = static_cast<float>(swapChainExtent.height);
+    viewport.width = static_cast<float>(swapChainAggregate.extent.width);
+    viewport.height = static_cast<float>(swapChainAggregate.extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = swapChainExtent;
+    scissor.extent = swapChainAggregate.extent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -845,7 +841,6 @@ private:
   }
 
   void initVulkan() {
-    createSwapChain();
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
@@ -863,7 +858,7 @@ private:
     vkResetFences(*device, 1, &inFlightFence);
 
     std::uint32_t imageIndex;
-    vkAcquireNextImageKHR(*device, swapChain,
+    vkAcquireNextImageKHR(*device, *(swapChainAggregate.swapChain),
                           std::numeric_limits<std::uint64_t>::max(),
                           imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
@@ -899,7 +894,7 @@ private:
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
-    VkSwapchainKHR swapChains[] = {swapChain};
+    VkSwapchainKHR swapChains[] = {*(swapChainAggregate.swapChain)};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
@@ -938,8 +933,6 @@ private:
     for (auto& imageView : swapChainImageViews) {
       vkDestroyImageView(*device, imageView, nullptr);
     }
-
-    vkDestroySwapchainKHR(*device, swapChain, nullptr);
   }
 
   void cleanupWindow() {
@@ -958,10 +951,7 @@ private:
   vk::raii::Device device;
   vk::raii::Queue graphicsQueue;
   vk::raii::Queue presentQueue;
-  VkSwapchainKHR swapChain;
-  std::vector<VkImage> swapChainImages;
-  VkFormat swapChainImageFormat;
-  VkExtent2D swapChainExtent;
+  SwapChainAggreggate swapChainAggregate;
   std::vector<VkImageView> swapChainImageViews;
   VkRenderPass renderPass;
   VkPipelineLayout pipelineLayout;
