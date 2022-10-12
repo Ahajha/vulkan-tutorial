@@ -54,7 +54,8 @@ public:
       , pipelineLayout{createPipelineLayout()}
       , graphicsPipeline{createGraphicsPipeline()}
       , swapChainFramebuffers{createFramebuffers()}
-      , commandPool{createCommandPool()} {
+      , commandPool{createCommandPool()}
+      , commandBuffer{createCommandBuffer()} {
     initVulkan();
   }
 
@@ -739,17 +740,17 @@ private:
     commandBuffer.end();
   }
 
-  void createCommandBuffer() {
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = *commandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
+  [[nodiscard]] vk::raii::CommandBuffer createCommandBuffer() {
 
-    if (vkAllocateCommandBuffers(*device, &allocInfo, &commandBuffer) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to allocate command buffers!");
-    }
+    const vk::CommandBufferAllocateInfo allocInfo{
+        .commandPool = *commandPool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    };
+
+    // Create a vector of buffers, then extract the sole element.
+    // This could maybe be cleaner.
+    return std::move(vk::raii::CommandBuffers{device, allocInfo}.front());
   }
 
   void createSyncObjects() {
@@ -772,10 +773,7 @@ private:
     }
   }
 
-  void initVulkan() {
-    createCommandBuffer();
-    createSyncObjects();
-  }
+  void initVulkan() { createSyncObjects(); }
 
   void drawFrame() {
     // Wait for the previous frame to finish, no timeout
@@ -789,9 +787,9 @@ private:
                           std::numeric_limits<std::uint64_t>::max(),
                           imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
-    vkResetCommandBuffer(commandBuffer, 0);
+    vkResetCommandBuffer(*commandBuffer, 0);
 
-    recordCommandBuffer(commandBuffer, imageIndex);
+    recordCommandBuffer(*commandBuffer, imageIndex);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -804,7 +802,8 @@ private:
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
+    const auto& cmdbuffer = static_cast<VkCommandBuffer>(*commandBuffer);
+    submitInfo.pCommandBuffers = &cmdbuffer;
 
     VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
     submitInfo.signalSemaphoreCount = 1;
@@ -871,7 +870,7 @@ private:
   vk::raii::Pipeline graphicsPipeline;
   std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
   vk::raii::CommandPool commandPool;
-  VkCommandBuffer commandBuffer;
+  vk::raii::CommandBuffer commandBuffer;
   VkSemaphore imageAvailableSemaphore;
   VkSemaphore renderFinishedSemaphore;
   VkFence inFlightFence;
