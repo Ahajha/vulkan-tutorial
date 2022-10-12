@@ -55,16 +55,14 @@ public:
       , graphicsPipeline{createGraphicsPipeline()}
       , swapChainFramebuffers{createFramebuffers()}
       , commandPool{createCommandPool()}
-      , commandBuffer{createCommandBuffer()} {
-    initVulkan();
-  }
+      , commandBuffer{createCommandBuffer()}
+      , imageAvailableSemaphore{device, vk::SemaphoreCreateInfo{}}
+      , renderFinishedSemaphore{device, vk::SemaphoreCreateInfo{}}
+      , inFlightFence{createFence()} {}
 
   void run() { mainLoop(); }
 
-  ~HelloTriangleApplication() {
-    cleanupVulkan();
-    cleanupWindow();
-  }
+  ~HelloTriangleApplication() { cleanupWindow(); }
 
   // clang-format off
   HelloTriangleApplication &operator=(const HelloTriangleApplication &) = delete;
@@ -753,39 +751,28 @@ private:
     return std::move(vk::raii::CommandBuffers{device, allocInfo}.front());
   }
 
-  void createSyncObjects() {
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  [[nodiscard]] vk::raii::Fence createFence() {
+    constexpr vk::FenceCreateInfo fenceInfo{
+        // Start in the signaled state
+        .flags = vk::FenceCreateFlagBits::eSignaled,
+    };
 
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-    // Start in the signaled state
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    if (vkCreateSemaphore(*device, &semaphoreInfo, nullptr,
-                          &imageAvailableSemaphore) != VK_SUCCESS ||
-        vkCreateSemaphore(*device, &semaphoreInfo, nullptr,
-                          &renderFinishedSemaphore) != VK_SUCCESS ||
-        vkCreateFence(*device, &fenceInfo, nullptr, &inFlightFence) !=
-            VK_SUCCESS) {
-      throw std::runtime_error("failed to create semaphores!");
-    }
+    return {device, fenceInfo};
   }
 
-  void initVulkan() { createSyncObjects(); }
-
   void drawFrame() {
+    VkFence fence = *inFlightFence;
     // Wait for the previous frame to finish, no timeout
-    vkWaitForFences(*device, 1, &inFlightFence, VK_TRUE,
+    vkWaitForFences(*device, 1, &fence, VK_TRUE,
                     std::numeric_limits<std::uint64_t>::max());
 
-    vkResetFences(*device, 1, &inFlightFence);
+    vkResetFences(*device, 1, &fence);
 
     std::uint32_t imageIndex;
     vkAcquireNextImageKHR(*device, *(swapChainAggregate.swapChain),
                           std::numeric_limits<std::uint64_t>::max(),
-                          imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+                          *imageAvailableSemaphore, VK_NULL_HANDLE,
+                          &imageIndex);
 
     vkResetCommandBuffer(*commandBuffer, 0);
 
@@ -794,7 +781,7 @@ private:
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = {imageAvailableSemaphore};
+    VkSemaphore waitSemaphores[] = {*imageAvailableSemaphore};
     VkPipelineStageFlags waitStages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
     submitInfo.waitSemaphoreCount = 1;
@@ -805,11 +792,11 @@ private:
     const auto& cmdbuffer = static_cast<VkCommandBuffer>(*commandBuffer);
     submitInfo.pCommandBuffers = &cmdbuffer;
 
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphore};
+    VkSemaphore signalSemaphores[] = {*renderFinishedSemaphore};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(*graphicsQueue, 1, &submitInfo, inFlightFence) !=
+    if (vkQueueSubmit(*graphicsQueue, 1, &submitInfo, *inFlightFence) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to submit draw command buffer!");
     }
@@ -841,12 +828,6 @@ private:
     vkDeviceWaitIdle(*device);
   }
 
-  void cleanupVulkan() {
-    vkDestroyFence(*device, inFlightFence, nullptr);
-    vkDestroySemaphore(*device, renderFinishedSemaphore, nullptr);
-    vkDestroySemaphore(*device, imageAvailableSemaphore, nullptr);
-  }
-
   void cleanupWindow() {
     glfwDestroyWindow(window);
 
@@ -871,9 +852,9 @@ private:
   std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
   vk::raii::CommandPool commandPool;
   vk::raii::CommandBuffer commandBuffer;
-  VkSemaphore imageAvailableSemaphore;
-  VkSemaphore renderFinishedSemaphore;
-  VkFence inFlightFence;
+  vk::raii::Semaphore imageAvailableSemaphore;
+  vk::raii::Semaphore renderFinishedSemaphore;
+  vk::raii::Fence inFlightFence;
 };
 
 int main() {
