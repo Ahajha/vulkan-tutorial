@@ -761,61 +761,60 @@ private:
   }
 
   void drawFrame() {
-    VkFence fence = *inFlightFence;
-    // Wait for the previous frame to finish, no timeout
-    vkWaitForFences(*device, 1, &fence, VK_TRUE,
-                    std::numeric_limits<std::uint64_t>::max());
+    const auto waitResult = device.waitForFences(
+        *inFlightFence, true, std::numeric_limits<std::uint64_t>::max());
 
-    vkResetFences(*device, 1, &fence);
+    if (waitResult != vk::Result::eSuccess) {
+      throw std::runtime_error("failed to wait for fence!");
+    }
 
-    std::uint32_t imageIndex;
-    vkAcquireNextImageKHR(*device, *(swapChainAggregate.swapChain),
-                          std::numeric_limits<std::uint64_t>::max(),
-                          *imageAvailableSemaphore, VK_NULL_HANDLE,
-                          &imageIndex);
+    device.resetFences(*inFlightFence);
 
-    vkResetCommandBuffer(*commandBuffer, 0);
+    const vk::AcquireNextImageInfoKHR acquireInfo{
+        .swapchain = *(swapChainAggregate.swapChain),
+        .timeout = std::numeric_limits<std::uint64_t>::max(),
+        .semaphore = *imageAvailableSemaphore,
+        .deviceMask = 1,
+    };
+
+    const auto [acquireResult, imageIndex] =
+        device.acquireNextImage2KHR(acquireInfo);
+
+    // By design, this function does not throw. For our purposes, we will throw.
+    // https://github.com/KhronosGroup/Vulkan-Hpp/issues/150
+    if (acquireResult != vk::Result::eSuccess) {
+      throw std::runtime_error("failed to acquire next image!");
+    }
+
+    commandBuffer.reset();
 
     recordCommandBuffer(*commandBuffer, imageIndex);
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    constexpr vk::PipelineStageFlags waitStages[] = {
+        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+    };
 
-    VkSemaphore waitSemaphores[] = {*imageAvailableSemaphore};
-    VkPipelineStageFlags waitStages[] = {
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
+    vk::SubmitInfo submitInfo{
+        .pWaitDstStageMask = waitStages,
+    };
+    submitInfo.setWaitSemaphores(*imageAvailableSemaphore);
+    submitInfo.setCommandBuffers(*commandBuffer);
+    submitInfo.setSignalSemaphores(*renderFinishedSemaphore);
 
-    submitInfo.commandBufferCount = 1;
-    const auto& cmdbuffer = static_cast<VkCommandBuffer>(*commandBuffer);
-    submitInfo.pCommandBuffers = &cmdbuffer;
+    graphicsQueue.submit(submitInfo, *inFlightFence);
 
-    VkSemaphore signalSemaphores[] = {*renderFinishedSemaphore};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    if (vkQueueSubmit(*graphicsQueue, 1, &submitInfo, *inFlightFence) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to submit draw command buffer!");
-    }
-
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapChains[] = {*(swapChainAggregate.swapChain)};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &imageIndex;
-
-    presentInfo.pResults = nullptr; // Optional
+    vk::PresentInfoKHR presentInfo{
+        .pImageIndices = &imageIndex,
+    };
+    presentInfo.setWaitSemaphores(*renderFinishedSemaphore);
+    presentInfo.setSwapchains(*(swapChainAggregate.swapChain));
 
     // Finally, present.
-    vkQueuePresentKHR(*presentQueue, &presentInfo);
+    const auto presentResult = presentQueue.presentKHR(presentInfo);
+
+    if (presentResult != vk::Result::eSuccess) {
+      throw std::runtime_error("failed to present!");
+    }
   }
 
   void mainLoop() {
@@ -825,7 +824,7 @@ private:
     }
 
     // Wait for all async operations to finish
-    vkDeviceWaitIdle(*device);
+    device.waitIdle();
   }
 
   void cleanupWindow() {
