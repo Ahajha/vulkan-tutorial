@@ -53,7 +53,8 @@ public:
       , renderPass{createRenderPass()}
       , pipelineLayout{createPipelineLayout()}
       , graphicsPipeline{createGraphicsPipeline()}
-      , swapChainFramebuffers{createFramebuffers()} {
+      , swapChainFramebuffers{createFramebuffers()}
+      , commandPool{createCommandPool()} {
     initVulkan();
   }
 
@@ -678,18 +679,14 @@ private:
     return swapChainFramebuffers;
   }
 
-  void createCommandPool() {
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  [[nodiscard]] vk::raii::CommandPool createCommandPool() {
+    const vk::CommandPoolCreateInfo poolInfo{
+        // Allow command buffers to be rerecorded individually
+        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        .queueFamilyIndex = queueFamilyIndices.graphicsFamily,
+    };
 
-    // Allow command buffers to be rerecorded individually
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
-
-    if (vkCreateCommandPool(*device, &poolInfo, nullptr, &commandPool) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create command pool!");
-    }
+    return {device, poolInfo};
   }
 
   void recordCommandBuffer(VkCommandBuffer commandBuffer,
@@ -748,7 +745,7 @@ private:
   void createCommandBuffer() {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = commandPool;
+    allocInfo.commandPool = *commandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = 1;
 
@@ -779,8 +776,6 @@ private:
   }
 
   void initVulkan() {
-    createFramebuffers();
-    createCommandPool();
     createCommandBuffer();
     createSyncObjects();
   }
@@ -854,8 +849,6 @@ private:
     vkDestroyFence(*device, inFlightFence, nullptr);
     vkDestroySemaphore(*device, renderFinishedSemaphore, nullptr);
     vkDestroySemaphore(*device, imageAvailableSemaphore, nullptr);
-
-    vkDestroyCommandPool(*device, commandPool, nullptr);
   }
 
   void cleanupWindow() {
@@ -880,7 +873,7 @@ private:
   vk::raii::PipelineLayout pipelineLayout;
   vk::raii::Pipeline graphicsPipeline;
   std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
-  VkCommandPool commandPool;
+  vk::raii::CommandPool commandPool;
   VkCommandBuffer commandBuffer;
   VkSemaphore imageAvailableSemaphore;
   VkSemaphore renderFinishedSemaphore;
