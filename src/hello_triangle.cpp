@@ -52,7 +52,8 @@ public:
       , swapChainImageViews{createImageViews()}
       , renderPass{createRenderPass()}
       , pipelineLayout{createPipelineLayout()}
-      , graphicsPipeline{createGraphicsPipeline()} {
+      , graphicsPipeline{createGraphicsPipeline()}
+      , swapChainFramebuffers{createFramebuffers()} {
     initVulkan();
   }
 
@@ -659,26 +660,22 @@ private:
     return {device, nullptr, pipelineInfo};
   }
 
-  void createFramebuffers() {
-    swapChainFramebuffers.resize(swapChainImageViews.size());
+  [[nodiscard]] std::vector<vk::raii::Framebuffer> createFramebuffers() {
+    std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
+    swapChainFramebuffers.reserve(swapChainImageViews.size());
 
-    for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-      VkImageView attachments[] = {*(swapChainImageViews[i])};
+    for (const auto& imageView : swapChainImageViews) {
+      vk::FramebufferCreateInfo framebufferInfo{
+          .renderPass = *renderPass,
+          .width = swapChainAggregate.extent.width,
+          .height = swapChainAggregate.extent.height,
+          .layers = 1,
+      };
+      framebufferInfo.setAttachments(*imageView);
 
-      VkFramebufferCreateInfo framebufferInfo{};
-      framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-      framebufferInfo.renderPass = *renderPass;
-      framebufferInfo.attachmentCount = 1;
-      framebufferInfo.pAttachments = attachments;
-      framebufferInfo.width = swapChainAggregate.extent.width;
-      framebufferInfo.height = swapChainAggregate.extent.height;
-      framebufferInfo.layers = 1;
-
-      if (vkCreateFramebuffer(*device, &framebufferInfo, nullptr,
-                              &swapChainFramebuffers[i]) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create framebuffer!");
-      }
+      swapChainFramebuffers.emplace_back(device, framebufferInfo);
     }
+    return swapChainFramebuffers;
   }
 
   void createCommandPool() {
@@ -709,7 +706,7 @@ private:
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = *renderPass;
-    renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+    renderPassInfo.framebuffer = *(swapChainFramebuffers[imageIndex]);
 
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = swapChainAggregate.extent;
@@ -859,10 +856,6 @@ private:
     vkDestroySemaphore(*device, imageAvailableSemaphore, nullptr);
 
     vkDestroyCommandPool(*device, commandPool, nullptr);
-
-    for (auto framebuffer : swapChainFramebuffers) {
-      vkDestroyFramebuffer(*device, framebuffer, nullptr);
-    }
   }
 
   void cleanupWindow() {
@@ -886,7 +879,7 @@ private:
   vk::raii::RenderPass renderPass;
   vk::raii::PipelineLayout pipelineLayout;
   vk::raii::Pipeline graphicsPipeline;
-  std::vector<VkFramebuffer> swapChainFramebuffers;
+  std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
   VkCommandPool commandPool;
   VkCommandBuffer commandBuffer;
   VkSemaphore imageAvailableSemaphore;
