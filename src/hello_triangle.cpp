@@ -689,57 +689,54 @@ private:
     return {device, poolInfo};
   }
 
-  void recordCommandBuffer(VkCommandBuffer commandBuffer,
+  void recordCommandBuffer(vk::CommandBuffer commandBuffer,
                            std::uint32_t imageIndex) {
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = 0;                  // Optional
-    beginInfo.pInheritanceInfo = nullptr; // Optional
+    const vk::CommandBufferBeginInfo beginInfo;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-      throw std::runtime_error("failed to begin recording command buffer!");
-    }
-
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = *renderPass;
-    renderPassInfo.framebuffer = *(swapChainFramebuffers[imageIndex]);
-
-    renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent = swapChainAggregate.extent;
+    commandBuffer.begin(beginInfo);
 
     // Set background color to black, 100% opacity
-    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearColor;
+    const vk::ClearValue clearColor{
+        .color = std::array{0.0f, 0.0f, 0.0f, 1.0f},
+    };
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo,
-                         VK_SUBPASS_CONTENTS_INLINE);
+    vk::RenderPassBeginInfo renderPassInfo{
+        .renderPass = *renderPass,
+        .framebuffer = *(swapChainFramebuffers[imageIndex]),
+        .renderArea =
+            {
+                .offset = {0, 0},
+                .extent = swapChainAggregate.extent,
+            },
+    };
+    renderPassInfo.setClearValues(clearColor);
 
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      *graphicsPipeline);
+    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swapChainAggregate.extent.width);
-    viewport.height = static_cast<float>(swapChainAggregate.extent.height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                               *graphicsPipeline);
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = swapChainAggregate.extent;
-    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+    const vk::Viewport viewport{
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = static_cast<float>(swapChainAggregate.extent.width),
+        .height = static_cast<float>(swapChainAggregate.extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    commandBuffer.setViewport(0, viewport);
 
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    const vk::Rect2D scissor{
+        .offset = {0, 0},
+        .extent = swapChainAggregate.extent,
+    };
+    commandBuffer.setScissor(0, scissor);
 
-    vkCmdEndRenderPass(commandBuffer);
+    commandBuffer.draw(3, 1, 0, 0);
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-      throw std::runtime_error("failed to record command buffer!");
-    }
+    commandBuffer.endRenderPass();
+
+    commandBuffer.end();
   }
 
   void createCommandBuffer() {
