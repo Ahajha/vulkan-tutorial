@@ -1,5 +1,5 @@
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include <glfwpp/glfwpp.h>
 
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
@@ -62,28 +62,12 @@ public:
 
   void run() { mainLoop(); }
 
-  ~HelloTriangleApplication() { cleanupWindow(); }
-
-  // clang-format off
-  HelloTriangleApplication &operator=(const HelloTriangleApplication &) = delete;
-  HelloTriangleApplication &operator=(HelloTriangleApplication &&) = delete;
-  HelloTriangleApplication(const HelloTriangleApplication &) = delete;
-  HelloTriangleApplication(HelloTriangleApplication &&) = delete;
-  // clang-format on
-
 private:
   // Initialized the GLFW window
-  [[nodiscard]] static GLFWwindow* initWindow() {
-    glfwInit();
-
-    // Disable OpenGL in GLFW
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-    // For now, disallow sizing of windows
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-    // Width, Height, window name, monitor, unused(OpenGL only)
-    return glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
+  [[nodiscard]] static glfw::Window initWindow() {
+    glfw::WindowHints{.resizable = false, .clientApi = glfw::ClientApi::None}
+        .apply();
+    return {WIDTH, HEIGHT, "Vulkan"};
   }
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL
@@ -102,12 +86,7 @@ private:
   // Get a list of Vulkan extensions required/requested by the application
   [[nodiscard]] static std::vector<const char*> getRequiredExtensions() {
     // Extensions are needed for GLFW, we can query GLFW to get this info
-    std::uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions =
-        glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    std::vector<const char*> extensions(glfwExtensions,
-                                        glfwExtensions + glfwExtensionCount);
+    auto extensions = glfw::getRequiredInstanceExtensions();
 
     if constexpr (enableValidationLayers) {
       // Add "VK_EXT_debug_utils", macro is provided to prevent typos
@@ -286,8 +265,7 @@ private:
       // Not sure about the reasoning about this branch
       return capabilities.currentExtent;
     } else {
-      int width, height;
-      glfwGetFramebufferSize(window, &width, &height);
+      const auto [width, height] = window.getFramebufferSize();
 
       const auto [minWidth, minHeight] = capabilities.minImageExtent;
       const auto [maxWidth, maxHeight] = capabilities.maxImageExtent;
@@ -349,7 +327,7 @@ private:
 
   [[nodiscard]] vk::raii::SurfaceKHR createSurface() {
     VkSurfaceKHR native_surface;
-    if (glfwCreateWindowSurface(*instance, window, nullptr, &native_surface) !=
+    if (window.createSurface(*instance, nullptr, &native_surface) !=
         VK_SUCCESS) {
       throw std::runtime_error("failed to create window surface!");
     }
@@ -818,8 +796,8 @@ private:
   }
 
   void mainLoop() {
-    while (!glfwWindowShouldClose(window)) {
-      glfwPollEvents();
+    while (!window.shouldClose()) {
+      glfw::pollEvents();
       drawFrame();
     }
 
@@ -827,13 +805,8 @@ private:
     device.waitIdle();
   }
 
-  void cleanupWindow() {
-    glfwDestroyWindow(window);
-
-    glfwTerminate();
-  }
-
-  GLFWwindow* window;
+  glfw::GlfwLibrary glfwLib{glfw::init()};
+  glfw::Window window;
   vk::raii::Context context;
   vk::raii::Instance instance;
   vk::raii::DebugUtilsMessengerEXT debugMessenger;

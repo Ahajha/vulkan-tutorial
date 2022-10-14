@@ -3,7 +3,7 @@
 # (notice the last two args) if installing for the first time
 
 [requires]
-glfw/3.3.7
+glfwpp/latest@local/stable
 vulkan-loader/1.3.221
 glm/0.9.9.8
 shaderc/2021.1
