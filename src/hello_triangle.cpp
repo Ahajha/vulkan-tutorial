@@ -78,7 +78,7 @@ private:
   }
 
   // Creates the Vulkan instance
-  [[nodiscard]] vk::raii::Instance createInstance() {
+  [[nodiscard]] vk::raii::Instance createInstance() const {
     // Set app info (optional)
     const vk::ApplicationInfo appInfo{
         .pApplicationName = "Hello Triangle",
@@ -133,7 +133,7 @@ private:
   };
 
   [[nodiscard]] OptionalQueueFamilyIndices
-  findQueueFamilies(vk::PhysicalDevice device) {
+  findQueueFamilies(vk::PhysicalDevice device) const {
     OptionalQueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
@@ -161,7 +161,8 @@ private:
 
   // Returns true if deviceExtensions is a subset of the available device
   // extensions.
-  [[nodiscard]] bool checkDeviceExtensionSupport(vk::PhysicalDevice device) {
+  [[nodiscard]] bool
+  checkDeviceExtensionSupport(vk::PhysicalDevice device) const {
     const auto availableExtensions =
         device.enumerateDeviceExtensionProperties();
 
@@ -187,7 +188,7 @@ private:
     std::vector<vk::PresentModeKHR> presentModes;
   };
 
-  bool isDeviceSuitable(vk::PhysicalDevice device) {
+  bool isDeviceSuitable(vk::PhysicalDevice device) const {
     if (!findQueueFamilies(device).isComplete() ||
         !checkDeviceExtensionSupport(device))
       return false;
@@ -198,7 +199,7 @@ private:
   }
 
   [[nodiscard]] vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
-      const std::span<const vk::SurfaceFormatKHR> availableFormats) {
+      const std::span<const vk::SurfaceFormatKHR> availableFormats) const {
     const vk::SurfaceFormatKHR desiredFormat{
         .format = vk::Format::eB8G8R8A8Srgb,
         .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear,
@@ -211,7 +212,7 @@ private:
   }
 
   [[nodiscard]] vk::PresentModeKHR chooseSwapPresentMode(
-      const std::span<const vk::PresentModeKHR> availablePresentModes) {
+      const std::span<const vk::PresentModeKHR> availablePresentModes) const {
     const vk::PresentModeKHR desiredPresentMode = vk::PresentModeKHR::eMailbox;
 
     const auto iter =
@@ -222,7 +223,7 @@ private:
   }
 
   [[nodiscard]] vk::Extent2D
-  chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+  chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) const {
 
     if (capabilities.currentExtent.width !=
         std::numeric_limits<std::uint32_t>::max()) {
@@ -246,7 +247,7 @@ private:
   }
 
   // Returns a suitable physical device
-  [[nodiscard]] vk::raii::PhysicalDevice pickPhysicalDevice() {
+  [[nodiscard]] vk::raii::PhysicalDevice pickPhysicalDevice() const {
     const auto devices = instance.enumeratePhysicalDevices();
 
     auto iter = std::ranges::find_if(
@@ -259,7 +260,7 @@ private:
     return *iter;
   }
 
-  [[nodiscard]] vk::raii::Device createLogicalDevice() {
+  [[nodiscard]] vk::raii::Device createLogicalDevice() const {
     const std::set<std::uint32_t> uniqueQueueFamilies = {
         queueFamilyIndices.graphicsFamily, queueFamilyIndices.presentFamily};
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
@@ -305,7 +306,7 @@ private:
     vk::Extent2D extent;
   };
 
-  [[nodiscard]] SwapChainAggreggate createSwapChain() {
+  [[nodiscard]] SwapChainAggreggate createSwapChain() const {
     const auto swapChainSupport =
         SwapChainSupportDetails(*physicalDevice, *surface);
     const auto surfaceFormat =
@@ -481,12 +482,12 @@ private:
     return {device, renderPassInfo};
   }
 
-  [[nodiscard]] vk::raii::PipelineLayout createPipelineLayout() {
+  [[nodiscard]] vk::raii::PipelineLayout createPipelineLayout() const {
     const vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
     return {device, pipelineLayoutInfo};
   }
 
-  [[nodiscard]] vk::raii::Pipeline createGraphicsPipeline() {
+  [[nodiscard]] vk::raii::Pipeline createGraphicsPipeline() const {
     const auto vertShaderCode = readFile("shaders/vert.spv");
     const auto fragShaderCode = readFile("shaders/frag.spv");
 
@@ -602,7 +603,7 @@ private:
     return {device, nullptr, pipelineInfo};
   }
 
-  [[nodiscard]] std::vector<vk::raii::Framebuffer> createFramebuffers() {
+  [[nodiscard]] std::vector<vk::raii::Framebuffer> createFramebuffers() const {
     std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
     swapChainFramebuffers.reserve(swapChainImageViews.size());
 
@@ -620,7 +621,7 @@ private:
     return swapChainFramebuffers;
   }
 
-  [[nodiscard]] vk::raii::CommandPool createCommandPool() {
+  [[nodiscard]] vk::raii::CommandPool createCommandPool() const {
     const vk::CommandPoolCreateInfo poolInfo{
         // Allow command buffers to be rerecorded individually
         .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -631,7 +632,7 @@ private:
   }
 
   void recordCommandBuffer(vk::CommandBuffer commandBuffer,
-                           std::uint32_t imageIndex) {
+                           std::uint32_t imageIndex) const {
     const vk::CommandBufferBeginInfo beginInfo;
 
     commandBuffer.begin(beginInfo);
@@ -680,7 +681,7 @@ private:
     commandBuffer.end();
   }
 
-  [[nodiscard]] vk::raii::CommandBuffer createCommandBuffer() {
+  [[nodiscard]] vk::raii::CommandBuffer createCommandBuffer() const {
 
     const vk::CommandBufferAllocateInfo allocInfo{
         .commandPool = *commandPool,
@@ -693,7 +694,7 @@ private:
     return std::move(vk::raii::CommandBuffers{device, allocInfo}.front());
   }
 
-  [[nodiscard]] vk::raii::Fence createFence() {
+  [[nodiscard]] vk::raii::Fence createFence() const {
     constexpr vk::FenceCreateInfo fenceInfo{
         // Start in the signaled state
         .flags = vk::FenceCreateFlagBits::eSignaled,
@@ -702,7 +703,7 @@ private:
     return {device, fenceInfo};
   }
 
-  void drawFrame() {
+  void drawFrame() const {
     const auto waitResult = device.waitForFences(
         *inFlightFence, true, std::numeric_limits<std::uint64_t>::max());
 
@@ -759,7 +760,7 @@ private:
     }
   }
 
-  void mainLoop() {
+  void mainLoop() const {
     while (!window.shouldClose()) {
       glfw::pollEvents();
       drawFrame();
