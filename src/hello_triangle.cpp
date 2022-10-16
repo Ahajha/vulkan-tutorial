@@ -30,31 +30,6 @@ constexpr std::array validationLayers = {"VK_LAYER_KHRONOS_validation"};
 
 class HelloTriangleApplication {
 public:
-  HelloTriangleApplication()
-      : window{initWindow()}
-      , instance{createInstance()}
-      , surface{createSurface()}
-      , physicalDevice{pickPhysicalDevice()}
-      // We unwrap this result, we are guaranteed this will succeed since we
-      // validated that all the requested queues are available.
-      , queueFamilyIndices{findQueueFamilies(*physicalDevice)
-                               .finalize()
-                               .value()}
-      , device{createLogicalDevice()}
-      , graphicsQueue{device.getQueue(queueFamilyIndices.graphicsFamily, 0)}
-      , presentQueue{device.getQueue(queueFamilyIndices.presentFamily, 0)}
-      , swapChainAggregate{createSwapChain()}
-      , swapChainImageViews{createImageViews()}
-      , renderPass{createRenderPass()}
-      , pipelineLayout{createPipelineLayout()}
-      , graphicsPipeline{createGraphicsPipeline()}
-      , swapChainFramebuffers{createFramebuffers()}
-      , commandPool{createCommandPool()}
-      , commandBuffer{createCommandBuffer()}
-      , imageAvailableSemaphore{device, vk::SemaphoreCreateInfo{}}
-      , renderFinishedSemaphore{device, vk::SemaphoreCreateInfo{}}
-      , inFlightFence{createFence()} {}
-
   void run() { mainLoop(); }
 
 private:
@@ -795,30 +770,38 @@ private:
   }
 
   glfw::GlfwLibrary glfwLib{glfw::init()};
-  glfw::Window window;
+  glfw::Window window{initWindow()};
   vk::raii::Context context;
-  vk::raii::Instance instance;
+  vk::raii::Instance instance{createInstance()};
 #ifdef ENABLE_VALIDATION_LAYERS
   vk::raii::DebugUtilsMessengerEXT debugMessenger{
       instance, createDebugMessengerCreateInfo()};
 #endif
-  vk::raii::SurfaceKHR surface;
-  vk::raii::PhysicalDevice physicalDevice;
-  QueueFamilyIndices queueFamilyIndices;
-  vk::raii::Device device;
-  vk::raii::Queue graphicsQueue;
-  vk::raii::Queue presentQueue;
-  SwapChainAggreggate swapChainAggregate;
-  std::vector<vk::raii::ImageView> swapChainImageViews;
-  vk::raii::RenderPass renderPass;
-  vk::raii::PipelineLayout pipelineLayout;
-  vk::raii::Pipeline graphicsPipeline;
-  std::vector<vk::raii::Framebuffer> swapChainFramebuffers;
-  vk::raii::CommandPool commandPool;
-  vk::raii::CommandBuffer commandBuffer;
-  vk::raii::Semaphore imageAvailableSemaphore;
-  vk::raii::Semaphore renderFinishedSemaphore;
-  vk::raii::Fence inFlightFence;
+  vk::raii::SurfaceKHR surface{createSurface()};
+  vk::raii::PhysicalDevice physicalDevice{pickPhysicalDevice()};
+  // We unwrap this result, we are guaranteed this will succeed since we
+  // validated that all the requested queues are available.
+  QueueFamilyIndices queueFamilyIndices{
+      findQueueFamilies(*physicalDevice).finalize().value()};
+  vk::raii::Device device{createLogicalDevice()};
+  vk::raii::Queue graphicsQueue{
+      device.getQueue(queueFamilyIndices.graphicsFamily, 0)};
+  vk::raii::Queue presentQueue{
+      device.getQueue(queueFamilyIndices.presentFamily, 0)};
+  SwapChainAggreggate swapChainAggregate{createSwapChain()};
+  std::vector<vk::raii::ImageView> swapChainImageViews{createImageViews()};
+  vk::raii::RenderPass renderPass{createRenderPass()};
+  vk::raii::PipelineLayout pipelineLayout{createPipelineLayout()};
+  vk::raii::Pipeline graphicsPipeline{createGraphicsPipeline()};
+  std::vector<vk::raii::Framebuffer> swapChainFramebuffers{
+      createFramebuffers()};
+  vk::raii::CommandPool commandPool{createCommandPool()};
+  vk::raii::CommandBuffer commandBuffer{createCommandBuffer()};
+  vk::raii::Semaphore imageAvailableSemaphore{device,
+                                              vk::SemaphoreCreateInfo{}};
+  vk::raii::Semaphore renderFinishedSemaphore{device,
+                                              vk::SemaphoreCreateInfo{}};
+  vk::raii::Fence inFlightFence{createFence()};
 };
 
 int main() {
