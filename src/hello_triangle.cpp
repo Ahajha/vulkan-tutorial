@@ -718,7 +718,15 @@ private:
     return {m_device, fenceInfo};
   }
 
-  void drawFrame() const {
+  void recreateSwapChain() {
+    m_device.waitIdle();
+
+    m_swapChainAggregate = createSwapChain();
+    m_swapChainImageViews = createImageViews();
+    m_swapChainFramebuffers = createFramebuffers();
+  }
+
+  void drawFrame() {
     const auto waitResult = m_device.waitForFences(
         *m_inFlightFence, true, std::numeric_limits<std::uint64_t>::max());
 
@@ -738,9 +746,11 @@ private:
     const auto [acquireResult, imageIndex] =
         m_device.acquireNextImage2KHR(acquireInfo);
 
-    // By design, this function does not throw. For our purposes, we will throw.
-    // https://github.com/KhronosGroup/Vulkan-Hpp/issues/150
-    if (acquireResult != vk::Result::eSuccess) {
+    if (acquireResult == vk::Result::eErrorOutOfDateKHR) {
+      recreateSwapChain();
+      return;
+    } else if (acquireResult != vk::Result::eSuccess &&
+               acquireResult != vk::Result::eSuboptimalKHR) {
       throw std::runtime_error("failed to acquire next image!");
     }
 
@@ -770,9 +780,14 @@ private:
     // Finally, present.
     const auto presentResult = presentQueue.presentKHR(presentInfo);
 
-    if (presentResult != vk::Result::eSuccess) {
-      throw std::runtime_error("failed to present!");
+    if (presentResult == vk::Result::eErrorOutOfDateKHR ||
+        presentResult == vk::Result::eSuboptimalKHR) {
+      recreateSwapChain();
+    } else if (presentResult != vk::Result::eSuccess) {
+      throw std::runtime_error("failed to present swap chain image!");
     }
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
 
   void mainLoop() {
@@ -783,8 +798,6 @@ private:
 
     // Wait for all async operations to finish
     m_device.waitIdle();
-
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
 
   glfw::GlfwLibrary m_glfwLib{glfw::init()};
