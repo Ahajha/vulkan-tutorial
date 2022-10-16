@@ -741,8 +741,6 @@ private:
       throw std::runtime_error("failed to wait for fence!");
     }
 
-    m_device.resetFences(*m_inFlightFences[currentFrame]);
-
     const vk::AcquireNextImageInfoKHR acquireInfo{
         .swapchain = *(m_swapChainAggregate.swapChain),
         .timeout = std::numeric_limits<std::uint64_t>::max(),
@@ -760,6 +758,8 @@ private:
                acquireResult != vk::Result::eSuboptimalKHR) {
       throw std::runtime_error("failed to acquire next image!");
     }
+
+    m_device.resetFences(*m_inFlightFences[currentFrame]);
 
     m_commandBuffers[currentFrame].reset();
 
