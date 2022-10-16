@@ -28,6 +28,8 @@ constexpr std::array deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 constexpr std::array validationLayers = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
+constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 class HelloTriangleApplication {
 public:
   void run() { mainLoop(); }
@@ -684,17 +686,27 @@ private:
     commandBuffer.end();
   }
 
-  [[nodiscard]] vk::raii::CommandBuffer createCommandBuffer() const {
-
+  [[nodiscard]] std::vector<vk::raii::CommandBuffer>
+  createCommandBuffers() const {
     const vk::CommandBufferAllocateInfo allocInfo{
         .commandPool = *m_commandPool,
         .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1,
+        .commandBufferCount = MAX_FRAMES_IN_FLIGHT,
     };
 
-    // Create a vector of buffers, then extract the sole element.
-    // This could maybe be cleaner.
-    return std::move(vk::raii::CommandBuffers{m_device, allocInfo}.front());
+    return vk::raii::CommandBuffers{m_device, allocInfo};
+  }
+
+  [[nodiscard]] std::vector<vk::raii::Semaphore>
+  createSemaphores(std::uint32_t count) {
+    std::vector<vk::raii::Semaphore> semaphores;
+    semaphores.reserve(count);
+
+    constexpr vk::SemaphoreCreateInfo createInfo;
+    for (std::uint32_t i = 0; i < count; ++i) {
+      semaphores.emplace_back(m_device, createInfo);
+    }
+    return semaphores;
   }
 
   [[nodiscard]] vk::raii::Fence createFence() const {
@@ -719,7 +731,7 @@ private:
     const vk::AcquireNextImageInfoKHR acquireInfo{
         .swapchain = *(m_swapChainAggregate.swapChain),
         .timeout = std::numeric_limits<std::uint64_t>::max(),
-        .semaphore = *m_imageAvailableSemaphore,
+        .semaphore = *m_imageAvailableSemaphores[currentFrame],
         .deviceMask = 1,
     };
 
@@ -732,9 +744,9 @@ private:
       throw std::runtime_error("failed to acquire next image!");
     }
 
-    m_commandBuffer.reset();
+    m_commandBuffers[currentFrame].reset();
 
-    recordCommandBuffer(*m_commandBuffer, imageIndex);
+    recordCommandBuffer(*m_commandBuffers[currentFrame], imageIndex);
 
     constexpr vk::PipelineStageFlags waitStages[] = {
         vk::PipelineStageFlagBits::eColorAttachmentOutput,
@@ -743,16 +755,16 @@ private:
     vk::SubmitInfo submitInfo{
         .pWaitDstStageMask = waitStages,
     };
-    submitInfo.setWaitSemaphores(*m_imageAvailableSemaphore);
-    submitInfo.setCommandBuffers(*m_commandBuffer);
-    submitInfo.setSignalSemaphores(*m_renderFinishedSemaphore);
+    submitInfo.setWaitSemaphores(*m_imageAvailableSemaphores[currentFrame]);
+    submitInfo.setCommandBuffers(*m_commandBuffers[currentFrame]);
+    submitInfo.setSignalSemaphores(*m_renderFinishedSemaphores[currentFrame]);
 
     m_graphicsQueue.submit(submitInfo, *m_inFlightFence);
 
     vk::PresentInfoKHR presentInfo{
         .pImageIndices = &imageIndex,
     };
-    presentInfo.setWaitSemaphores(*m_renderFinishedSemaphore);
+    presentInfo.setWaitSemaphores(*m_renderFinishedSemaphores[currentFrame]);
     presentInfo.setSwapchains(*(m_swapChainAggregate.swapChain));
 
     // Finally, present.
@@ -763,7 +775,7 @@ private:
     }
   }
 
-  void mainLoop() const {
+  void mainLoop() {
     while (!m_window.shouldClose()) {
       glfw::pollEvents();
       drawFrame();
@@ -771,6 +783,8 @@ private:
 
     // Wait for all async operations to finish
     m_device.waitIdle();
+
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
   }
 
   glfw::GlfwLibrary m_glfwLib{glfw::init()};
@@ -800,12 +814,13 @@ private:
   std::vector<vk::raii::Framebuffer> m_swapChainFramebuffers{
       createFramebuffers()};
   vk::raii::CommandPool m_commandPool{createCommandPool()};
-  vk::raii::CommandBuffer m_commandBuffer{createCommandBuffer()};
-  vk::raii::Semaphore m_imageAvailableSemaphore{m_device,
-                                                vk::SemaphoreCreateInfo{}};
-  vk::raii::Semaphore m_renderFinishedSemaphore{m_device,
-                                                vk::SemaphoreCreateInfo{}};
+  std::vector<vk::raii::CommandBuffer> m_commandBuffers{createCommandBuffers()};
+  std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores{
+      createSemaphores(MAX_FRAMES_IN_FLIGHT)};
+  std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores{
+      createSemaphores(MAX_FRAMES_IN_FLIGHT)};
   vk::raii::Fence m_inFlightFence{createFence()};
+  std::uint32_t currentFrame{0};
 };
 
 int main() {
