@@ -19,9 +19,9 @@ int main() {
 
     std::cout << extensionCount << " extensions supported\n";
 
-    glm::mat4 matrix;
-    glm::vec4 vec;
-    auto test = matrix * vec;
+    glm::mat4 matrix{};
+    glm::vec4 vec{};
+    [[maybe_unused]] auto test = matrix * vec;
 
     while(!glfwWindowShouldClose(window)) {
         glfwPollEvents();
