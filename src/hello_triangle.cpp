@@ -709,13 +709,19 @@ private:
     return semaphores;
   }
 
-  [[nodiscard]] vk::raii::Fence createFence() const {
-    constexpr vk::FenceCreateInfo fenceInfo{
+  [[nodiscard]] std::vector<vk::raii::Fence>
+  createFences(std::uint32_t count) const {
+    std::vector<vk::raii::Fence> fences;
+    fences.reserve(count);
+    constexpr vk::FenceCreateInfo createInfo{
         // Start in the signaled state
         .flags = vk::FenceCreateFlagBits::eSignaled,
     };
 
-    return {m_device, fenceInfo};
+    for (std::uint32_t i = 0; i < count; ++i) {
+      fences.emplace_back(m_device, createInfo);
+    }
+    return fences;
   }
 
   void recreateSwapChain() {
@@ -727,14 +733,15 @@ private:
   }
 
   void drawFrame() {
-    const auto waitResult = m_device.waitForFences(
-        *m_inFlightFence, true, std::numeric_limits<std::uint64_t>::max());
+    const auto waitResult =
+        m_device.waitForFences(*m_inFlightFences[currentFrame], true,
+                               std::numeric_limits<std::uint64_t>::max());
 
     if (waitResult != vk::Result::eSuccess) {
       throw std::runtime_error("failed to wait for fence!");
     }
 
-    m_device.resetFences(*m_inFlightFence);
+    m_device.resetFences(*m_inFlightFences[currentFrame]);
 
     const vk::AcquireNextImageInfoKHR acquireInfo{
         .swapchain = *(m_swapChainAggregate.swapChain),
@@ -769,7 +776,7 @@ private:
     submitInfo.setCommandBuffers(*m_commandBuffers[currentFrame]);
     submitInfo.setSignalSemaphores(*m_renderFinishedSemaphores[currentFrame]);
 
-    m_graphicsQueue.submit(submitInfo, *m_inFlightFence);
+    m_graphicsQueue.submit(submitInfo, *m_inFlightFences[currentFrame]);
 
     vk::PresentInfoKHR presentInfo{
         .pImageIndices = &imageIndex,
@@ -832,7 +839,8 @@ private:
       createSemaphores(MAX_FRAMES_IN_FLIGHT)};
   std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores{
       createSemaphores(MAX_FRAMES_IN_FLIGHT)};
-  vk::raii::Fence m_inFlightFence{createFence()};
+  std::vector<vk::raii::Fence> m_inFlightFences{
+      createFences(MAX_FRAMES_IN_FLIGHT)};
   std::uint32_t currentFrame{0};
 };
 
