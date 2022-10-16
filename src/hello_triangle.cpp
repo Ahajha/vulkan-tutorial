@@ -73,7 +73,7 @@ private:
     using enum vk::DebugUtilsMessageSeverityFlagBitsEXT;
     using enum vk::DebugUtilsMessageTypeFlagBitsEXT;
     return {
-        .messageSeverity = eVerbose | eWarning | eError,
+        .messageSeverity = eWarning | eError,
         .messageType = eGeneral | eValidation | ePerformance,
         .pfnUserCallback = debugCallback,
     };
