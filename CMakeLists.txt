@@ -40,4 +40,4 @@ target_sources(hello_triangle PRIVATE
     "${CMAKE_BINARY_DIR}/shaders/vert.spv"
 )
 
-add_subdirectory(triangle_hpp)
+#add_subdirectory(triangle_hpp)
