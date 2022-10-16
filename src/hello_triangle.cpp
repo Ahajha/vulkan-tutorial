@@ -36,10 +36,14 @@ public:
 
 private:
   // Initialized the GLFW window
-  [[nodiscard]] static glfw::Window initWindow() {
-    glfw::WindowHints{.resizable = false, .clientApi = glfw::ClientApi::None}
-        .apply();
-    return {WIDTH, HEIGHT, "Vulkan"};
+  [[nodiscard]] glfw::Window initWindow() {
+    glfw::WindowHints{.clientApi = glfw::ClientApi::None}.apply();
+    glfw::Window window = {WIDTH, HEIGHT, "Vulkan"};
+
+    window.framebufferSizeEvent.setCallback(
+        [this](glfw::Window&, int, int) { framebufferResized = true; });
+
+    return window;
   }
 
   static VKAPI_ATTR VkBool32 VKAPI_CALL
@@ -788,7 +792,8 @@ private:
     const auto presentResult = presentQueue.presentKHR(presentInfo);
 
     if (presentResult == vk::Result::eErrorOutOfDateKHR ||
-        presentResult == vk::Result::eSuboptimalKHR) {
+        presentResult == vk::Result::eSuboptimalKHR || framebufferResized) {
+      framebufferResized = false;
       recreateSwapChain();
     } else if (presentResult != vk::Result::eSuccess) {
       throw std::runtime_error("failed to present swap chain image!");
@@ -842,6 +847,7 @@ private:
   std::vector<vk::raii::Fence> m_inFlightFences{
       createFences(MAX_FRAMES_IN_FLIGHT)};
   std::uint32_t currentFrame{0};
+  bool framebufferResized{false};
 };
 
 int main() {
