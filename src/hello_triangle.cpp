@@ -22,14 +22,10 @@
 constexpr std::uint32_t WIDTH = 800;
 constexpr std::uint32_t HEIGHT = 600;
 
-constexpr std::array validationLayers = {"VK_LAYER_KHRONOS_validation"};
-
 constexpr std::array deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-#ifdef NDEBUG
-constexpr bool enableValidationLayers = false;
-#else
-constexpr bool enableValidationLayers = true;
+#ifdef ENABLE_VALIDATION_LAYERS
+constexpr std::array validationLayers = {"VK_LAYER_KHRONOS_validation"};
 #endif
 
 class HelloTriangleApplication {
@@ -37,7 +33,6 @@ public:
   HelloTriangleApplication()
       : window{initWindow()}
       , instance{createInstance()}
-      , debugMessenger{instance, createDebugMessengerCreateInfo()}
       , surface{createSurface()}
       , physicalDevice{pickPhysicalDevice()}
       // We unwrap this result, we are guaranteed this will succeed since we
@@ -88,10 +83,10 @@ private:
     // Extensions are needed for GLFW, we can query GLFW to get this info
     auto extensions = glfw::getRequiredInstanceExtensions();
 
-    if constexpr (enableValidationLayers) {
-      // Add "VK_EXT_debug_utils", macro is provided to prevent typos
-      extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
+#ifdef ENABLE_VALIDATION_LAYERS
+    // Add "VK_EXT_debug_utils", macro is provided to prevent typos
+    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
 
     return extensions;
   }
@@ -118,29 +113,23 @@ private:
         .apiVersion = VK_API_VERSION_1_0,
     };
 
+#ifdef ENABLE_VALIDATION_LAYERS
+    vk::StructureChain<vk::InstanceCreateInfo,
+                       vk::DebugUtilsMessengerCreateInfoEXT>
+        chain{vk::InstanceCreateInfo{.pApplicationInfo = &appInfo},
+              createDebugMessengerCreateInfo()};
+
+    auto& createInfo = chain.get<vk::InstanceCreateInfo>();
+    createInfo.setPEnabledLayerNames(validationLayers);
+    std::cerr << "validation layers enabled\n";
+#else
+    vk::InstanceCreateInfo createInfo{.pApplicationInfo = &appInfo};
+#endif
+
     const auto requiredExtensions = getRequiredExtensions();
+    createInfo.setPEnabledExtensionNames(requiredExtensions);
 
-    if constexpr (enableValidationLayers) {
-      vk::StructureChain<vk::InstanceCreateInfo,
-                         vk::DebugUtilsMessengerCreateInfoEXT>
-          chain{vk::InstanceCreateInfo{.pApplicationInfo = &appInfo},
-                createDebugMessengerCreateInfo()};
-
-      auto& createInfo = chain.get<vk::InstanceCreateInfo>();
-
-      createInfo.setPEnabledExtensionNames(requiredExtensions);
-      createInfo.setPEnabledLayerNames(validationLayers);
-
-      std::cerr << "validation layers enabled\n";
-
-      return {context, createInfo};
-    } else {
-      vk::InstanceCreateInfo createInfo{.pApplicationInfo = &appInfo};
-
-      createInfo.setPEnabledExtensionNames(requiredExtensions);
-
-      return {context, createInfo};
-    }
+    return {context, createInfo};
   }
 
   struct QueueFamilyIndices {
@@ -318,9 +307,9 @@ private:
     createInfo.setQueueCreateInfos(queueCreateInfos);
     createInfo.setPEnabledExtensionNames(deviceExtensions);
 
-    if constexpr (enableValidationLayers) {
-      createInfo.setPEnabledLayerNames(validationLayers);
-    }
+#ifdef ENABLE_VALIDATION_LAYERS
+    createInfo.setPEnabledLayerNames(validationLayers);
+#endif
 
     return {physicalDevice, createInfo};
   }
@@ -809,7 +798,10 @@ private:
   glfw::Window window;
   vk::raii::Context context;
   vk::raii::Instance instance;
-  vk::raii::DebugUtilsMessengerEXT debugMessenger;
+#ifdef ENABLE_VALIDATION_LAYERS
+  vk::raii::DebugUtilsMessengerEXT debugMessenger{
+      instance, createDebugMessengerCreateInfo()};
+#endif
   vk::raii::SurfaceKHR surface;
   vk::raii::PhysicalDevice physicalDevice;
   QueueFamilyIndices queueFamilyIndices;

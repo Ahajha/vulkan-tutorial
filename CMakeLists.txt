@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.15)
 project(vulkan-tutorial CXX)
 
+option(ENABLE_VALIDATION_LAYERS "Enable Vulkan validation layers" ON)
+
 find_package(glfwpp REQUIRED)
 find_package(glm REQUIRED)
 find_package(Vulkan REQUIRED)
@@ -11,6 +13,9 @@ foreach(TARGET environment_test hello_triangle)
     target_compile_features(${TARGET} PRIVATE cxx_std_20)
     if (NOT MSVC)
         target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    if (${ENABLE_VALIDATION_LAYERS})
+        target_compile_definitions(${TARGET} PUBLIC ENABLE_VALIDATION_LAYERS)
     endif()
 endforeach()
 
