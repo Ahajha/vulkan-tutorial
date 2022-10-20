@@ -220,7 +220,11 @@ private:
   [[nodiscard]] static vk::PresentModeKHR chooseSwapPresentMode(
       const std::span<const vk::PresentModeKHR> availablePresentModes) {
     constexpr vk::PresentModeKHR desiredPresentMode =
-        vk::PresentModeKHR::eMailbox;
+        // vk::PresentModeKHR::eMailbox;
+        // Something about my dev environment is strange, it stutters terribly
+        // when using mailbox. Something related to high resolution + high
+        // refresh rates.
+        vk::PresentModeKHR::eFifo;
 
     const auto iter =
         std::ranges::find(availablePresentModes, desiredPresentMode);
