@@ -206,7 +206,7 @@ private:
 
   [[nodiscard]] static vk::SurfaceFormatKHR chooseSwapSurfaceFormat(
       const std::span<const vk::SurfaceFormatKHR> availableFormats) {
-    const vk::SurfaceFormatKHR desiredFormat{
+    constexpr vk::SurfaceFormatKHR desiredFormat{
         .format = vk::Format::eB8G8R8A8Srgb,
         .colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear,
     };
@@ -219,7 +219,8 @@ private:
 
   [[nodiscard]] static vk::PresentModeKHR chooseSwapPresentMode(
       const std::span<const vk::PresentModeKHR> availablePresentModes) {
-    const vk::PresentModeKHR desiredPresentMode = vk::PresentModeKHR::eMailbox;
+    constexpr vk::PresentModeKHR desiredPresentMode =
+        vk::PresentModeKHR::eMailbox;
 
     const auto iter =
         std::ranges::find(availablePresentModes, desiredPresentMode);
