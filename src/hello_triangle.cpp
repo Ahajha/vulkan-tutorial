@@ -734,6 +734,11 @@ private:
   }
 
   void recreateSwapChain() {
+    // If the window was minimized, wait.
+    while (m_window.getFramebufferSize() == std::tuple{0, 0}) {
+      glfw::waitEvents();
+    }
+
     m_device.waitIdle();
 
     m_swapChainAggregate = createSwapChain();
