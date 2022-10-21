@@ -768,6 +768,8 @@ private:
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                *m_graphicsPipeline);
 
+    commandBuffer.bindVertexBuffers(0, *m_vertexBuffer, {0ull});
+
     const vk::Viewport viewport{
         .x = 0.0f,
         .y = 0.0f,
