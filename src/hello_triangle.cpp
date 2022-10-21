@@ -688,7 +688,7 @@ private:
     return {m_device, poolInfo};
   }
 
-  [[nodiscard]] vk::raii::Buffer createVertexBuffer() {
+  [[nodiscard]] vk::raii::Buffer createVertexBuffer() const {
     const vk::BufferCreateInfo bufferInfo{
         .size = sizeof(vertices[0]) * vertices.size(),
         .usage = vk::BufferUsageFlagBits::eVertexBuffer,
@@ -698,6 +698,37 @@ private:
     };
 
     return {m_device, bufferInfo};
+  }
+
+  [[nodiscard]] std::uint32_t
+  findMemoryType(std::uint32_t typeFilter,
+                 vk::MemoryPropertyFlags properties) const {
+    const auto memProperties = m_physicalDevice.getMemoryProperties();
+
+    for (std::uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+      if (typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags &
+                                    properties) == properties) {
+        return i;
+      }
+    }
+  }
+
+  [[nodiscard]] vk::raii::DeviceMemory allocateVertexBufferMemory() {
+    const auto memRequirements = m_vertexBuffer.getMemoryRequirements();
+
+    const vk::MemoryAllocateInfo allocInfo{
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex =
+            findMemoryType(memRequirements.memoryTypeBits,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent),
+    };
+
+    vk::raii::DeviceMemory memory{m_device, allocInfo};
+
+    m_vertexBuffer.bindMemory(*memory, 0);
+
+    return memory;
   }
 
   void recordCommandBuffer(vk::CommandBuffer commandBuffer,
@@ -896,7 +927,8 @@ private:
       m_device.getQueue(m_queueFamilyIndices.graphicsFamily, 0)};
   vk::raii::Queue presentQueue{
       m_device.getQueue(m_queueFamilyIndices.presentFamily, 0)};
-  vk::raii::Buffer vertexBuffer{createVertexBuffer()};
+  vk::raii::Buffer m_vertexBuffer{createVertexBuffer()};
+  vk::raii::DeviceMemory m_vertexBufferMemory{allocateVertexBufferMemory()};
   SwapChainAggreggate m_swapChainAggregate{createSwapChain()};
   std::vector<vk::raii::ImageView> m_swapChainImageViews{createImageViews()};
   vk::raii::RenderPass m_renderPass{createRenderPass()};
