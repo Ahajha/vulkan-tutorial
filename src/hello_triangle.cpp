@@ -711,6 +711,8 @@ private:
         return i;
       }
     }
+
+    return 0;
   }
 
   [[nodiscard]] vk::raii::DeviceMemory allocateVertexBufferMemory() {
@@ -727,6 +729,14 @@ private:
     vk::raii::DeviceMemory memory{m_device, allocInfo};
 
     m_vertexBuffer.bindMemory(*memory, 0);
+
+    const auto buffersize = sizeof(vertices[0]) * vertices.size();
+
+    void* data = memory.mapMemory(0, buffersize);
+
+    std::memcpy(data, vertices.data(), buffersize);
+
+    memory.unmapMemory();
 
     return memory;
   }
