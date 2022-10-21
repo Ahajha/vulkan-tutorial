@@ -688,6 +688,18 @@ private:
     return {m_device, poolInfo};
   }
 
+  [[nodiscard]] vk::raii::Buffer createVertexBuffer() {
+    const vk::BufferCreateInfo bufferInfo{
+        .size = sizeof(vertices[0]) * vertices.size(),
+        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
+        // This buffer will only be used from the graphics queue, so we can give
+        // exclusive access
+        .sharingMode = vk::SharingMode::eExclusive,
+    };
+
+    return {m_device, bufferInfo};
+  }
+
   void recordCommandBuffer(vk::CommandBuffer commandBuffer,
                            std::uint32_t imageIndex) const {
     const vk::CommandBufferBeginInfo beginInfo;
@@ -884,6 +896,7 @@ private:
       m_device.getQueue(m_queueFamilyIndices.graphicsFamily, 0)};
   vk::raii::Queue presentQueue{
       m_device.getQueue(m_queueFamilyIndices.presentFamily, 0)};
+  vk::raii::Buffer vertexBuffer{createVertexBuffer()};
   SwapChainAggreggate m_swapChainAggregate{createSwapChain()};
   std::vector<vk::raii::ImageView> m_swapChainImageViews{createImageViews()};
   vk::raii::RenderPass m_renderPass{createRenderPass()};
