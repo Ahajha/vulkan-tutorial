@@ -1,9 +1,11 @@
-#define GLFW_INCLUDE_VULKAN
-#include <glfwpp/glfwpp.h>
-
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
+
+// GLFWPP includes special functions if it detects that vulkan-hpp is included,
+// so include after.
+#define GLFW_INCLUDE_VULKAN
+#include <glfwpp/glfwpp.h>
 
 #include <glm/glm.hpp>
 
@@ -344,12 +346,8 @@ private:
   }
 
   [[nodiscard]] vk::raii::SurfaceKHR createSurface() {
-    VkSurfaceKHR native_surface;
-    if (m_window.createSurface(*m_instance, nullptr, &native_surface) !=
-        VK_SUCCESS) {
-      throw std::runtime_error("failed to create window surface!");
-    }
-    return {m_instance, native_surface};
+    const auto surface = m_window.createSurface(*m_instance);
+    return {m_instance, surface};
   }
 
   struct SwapChainAggreggate {
