@@ -314,7 +314,8 @@ private:
   [[nodiscard]] vk::raii::Device createLogicalDevice() const {
     const std::set<std::uint32_t> uniqueQueueFamilies = {
         m_queueFamilyIndices.graphicsFamily,
-        m_queueFamilyIndices.presentFamily};
+        m_queueFamilyIndices.presentFamily,
+    };
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
     queueCreateInfos.reserve(uniqueQueueFamilies.size());
 
@@ -401,9 +402,10 @@ private:
         .oldSwapchain = nullptr,
     };
 
-    const std::uint32_t queueFamilyIndicesArray[] = {
+    const std::array queueFamilyIndicesArray = {
         m_queueFamilyIndices.graphicsFamily,
-        m_queueFamilyIndices.presentFamily};
+        m_queueFamilyIndices.presentFamily,
+    };
 
     // We will draw images on the graphics queue, then present them with the
     // present queue. So we need to tell vulkan to enable concurrency between
@@ -470,7 +472,7 @@ private:
     std::vector<char> buffer(fileSize);
 
     file.seekg(0);
-    file.read(buffer.data(), fileSize);
+    file.read(buffer.data(), static_cast<std::streamsize>(fileSize));
 
     return buffer;
   }
@@ -627,11 +629,10 @@ private:
 
     // Color blending
 
+    using enum vk::ColorComponentFlagBits;
     constexpr vk::PipelineColorBlendAttachmentState colorBlendAttachment{
         .blendEnable = false,
-        .colorWriteMask =
-            vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
+        .colorWriteMask = eR | eG | eB | eA,
     };
 
     vk::PipelineColorBlendStateCreateInfo colorBlending{
@@ -749,7 +750,7 @@ private:
 
     // Set background color to black, 100% opacity
     const vk::ClearValue clearColor{
-        .color = std::array{0.0f, 0.0f, 0.0f, 1.0f},
+        .color = {std::array{0.0f, 0.0f, 0.0f, 1.0f}},
     };
 
     vk::RenderPassBeginInfo renderPassInfo{
@@ -881,20 +882,20 @@ private:
         vk::PipelineStageFlagBits::eColorAttachmentOutput,
     };
 
-    vk::SubmitInfo submitInfo{
-        .pWaitDstStageMask = waitStages,
-    };
-    submitInfo.setWaitSemaphores(*m_imageAvailableSemaphores[currentFrame]);
-    submitInfo.setCommandBuffers(*m_commandBuffers[currentFrame]);
-    submitInfo.setSignalSemaphores(*m_renderFinishedSemaphores[currentFrame]);
+    const auto submitInfo =
+        vk::SubmitInfo{}
+            .setWaitDstStageMask(waitStages)
+            .setWaitSemaphores(*m_imageAvailableSemaphores[currentFrame])
+            .setCommandBuffers(*m_commandBuffers[currentFrame])
+            .setSignalSemaphores(*m_renderFinishedSemaphores[currentFrame]);
 
     m_graphicsQueue.submit(submitInfo, *m_inFlightFences[currentFrame]);
 
-    vk::PresentInfoKHR presentInfo{
-        .pImageIndices = &imageIndex,
-    };
-    presentInfo.setWaitSemaphores(*m_renderFinishedSemaphores[currentFrame]);
-    presentInfo.setSwapchains(*(m_swapChainAggregate.swapChain));
+    const auto presentInfo =
+        vk::PresentInfoKHR{}
+            .setImageIndices(imageIndex)
+            .setWaitSemaphores(*m_renderFinishedSemaphores[currentFrame])
+            .setSwapchains(*(m_swapChainAggregate.swapChain));
 
     // Finally, present.
     const auto presentResult = presentQueue.presentKHR(presentInfo);
