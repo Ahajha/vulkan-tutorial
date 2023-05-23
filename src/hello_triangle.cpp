@@ -1,5 +1,7 @@
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_enums.hpp>
+#include <vulkan/vulkan_handles.hpp>
 #include <vulkan/vulkan_raii.hpp>
 
 // GLFWPP includes special functions if it detects that vulkan-hpp is included,
@@ -687,16 +689,41 @@ private:
     return {m_device, poolInfo};
   }
 
-  [[nodiscard]] vk::raii::Buffer createVertexBuffer() const {
+  [[nodiscard]] vk::raii::Buffer
+  createBuffer(const vk::DeviceSize size,
+               const vk::BufferUsageFlags usage) const {
     const vk::BufferCreateInfo bufferInfo{
-        .size = sizeof(vertices[0]) * vertices.size(),
-        .usage = vk::BufferUsageFlagBits::eVertexBuffer,
-        // This buffer will only be used from the graphics queue, so we can give
-        // exclusive access
+        .size = size,
+        .usage = usage,
+        // These buffers will only be used from the graphics queue, so we can
+        // give exclusive access
         .sharingMode = vk::SharingMode::eExclusive,
     };
 
     return {m_device, bufferInfo};
+  }
+
+  [[nodiscard]] vk::raii::DeviceMemory
+  allocateMemory(vk::raii::Buffer& buffer,
+                 const vk::MemoryPropertyFlags properties) {
+    const vk::MemoryRequirements memRequirements =
+        buffer.getMemoryRequirements();
+
+    const vk::MemoryAllocateInfo allocInfo{
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex =
+            findMemoryType(memRequirements.memoryTypeBits, properties),
+    };
+
+    vk::raii::DeviceMemory bufferMemory{m_device, allocInfo};
+
+    buffer.bindMemory(*bufferMemory, 0);
+    return bufferMemory;
+  }
+
+  [[nodiscard]] vk::raii::Buffer createVertexBuffer() const {
+    return createBuffer(sizeof(vertices[0]) * vertices.size(),
+                        vk::BufferUsageFlagBits::eVertexBuffer);
   }
 
   [[nodiscard]] std::uint32_t
@@ -715,19 +742,10 @@ private:
   }
 
   [[nodiscard]] vk::raii::DeviceMemory allocateVertexBufferMemory() {
-    const auto memRequirements = m_vertexBuffer.getMemoryRequirements();
+    using enum vk::MemoryPropertyFlagBits;
+    const auto properties = eHostVisible | eHostCoherent;
 
-    const vk::MemoryAllocateInfo allocInfo{
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex =
-            findMemoryType(memRequirements.memoryTypeBits,
-                           vk::MemoryPropertyFlagBits::eHostVisible |
-                               vk::MemoryPropertyFlagBits::eHostCoherent),
-    };
-
-    vk::raii::DeviceMemory memory{m_device, allocInfo};
-
-    m_vertexBuffer.bindMemory(*memory, 0);
+    auto memory = allocateMemory(m_vertexBuffer, properties);
 
     const auto buffersize = sizeof(vertices[0]) * vertices.size();
 
