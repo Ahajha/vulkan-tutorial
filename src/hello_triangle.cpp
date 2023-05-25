@@ -689,73 +689,119 @@ private:
     return {m_device, poolInfo};
   }
 
-  [[nodiscard]] vk::raii::Buffer
-  createBuffer(const vk::DeviceSize size,
-               const vk::BufferUsageFlags usage) const {
-    const vk::BufferCreateInfo bufferInfo{
-        .size = size,
-        .usage = usage,
-        // These buffers will only be used from the graphics queue, so we can
-        // give exclusive access
-        .sharingMode = vk::SharingMode::eExclusive,
-    };
+  struct AllocatedBuffer {
+    vk::raii::Buffer buffer;
+    vk::raii::DeviceMemory memory;
 
-    return {m_device, bufferInfo};
-  }
+    [[nodiscard]] AllocatedBuffer(
+        const vk::raii::Device& device,
+        const vk::raii::PhysicalDevice& physicalDevice,
+        const vk::DeviceSize size, const vk::BufferUsageFlags usage,
+        const vk::MemoryPropertyFlags properties)
+        : buffer{createBuffer(device, size, usage)}
+        , memory{allocateMemory(device, physicalDevice, properties)} {};
 
-  [[nodiscard]] vk::raii::DeviceMemory
-  allocateMemory(vk::raii::Buffer& buffer,
-                 const vk::MemoryPropertyFlags properties) {
-    const vk::MemoryRequirements memRequirements =
-        buffer.getMemoryRequirements();
+  private:
+    [[nodiscard]] vk::raii::Buffer
+    createBuffer(const vk::raii::Device& device, const vk::DeviceSize size,
+                 const vk::BufferUsageFlags usage) {
+      const vk::BufferCreateInfo bufferInfo{
+          .size = size,
+          .usage = usage,
+          // These buffers will only be used from the graphics queue, so we can
+          // give exclusive access
+          .sharingMode = vk::SharingMode::eExclusive,
+      };
 
-    const vk::MemoryAllocateInfo allocInfo{
-        .allocationSize = memRequirements.size,
-        .memoryTypeIndex =
-            findMemoryType(memRequirements.memoryTypeBits, properties),
-    };
-
-    vk::raii::DeviceMemory bufferMemory{m_device, allocInfo};
-
-    buffer.bindMemory(*bufferMemory, 0);
-    return bufferMemory;
-  }
-
-  [[nodiscard]] vk::raii::Buffer createVertexBuffer() const {
-    return createBuffer(sizeof(vertices[0]) * vertices.size(),
-                        vk::BufferUsageFlagBits::eVertexBuffer);
-  }
-
-  [[nodiscard]] std::uint32_t
-  findMemoryType(std::uint32_t typeFilter,
-                 vk::MemoryPropertyFlags properties) const {
-    const auto memProperties = m_physicalDevice.getMemoryProperties();
-
-    for (std::uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-      if (typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags &
-                                    properties) == properties) {
-        return i;
-      }
+      return {device, bufferInfo};
     }
 
-    return 0;
+    [[nodiscard]] std::uint32_t
+    findMemoryType(const vk::raii::PhysicalDevice& physicalDevice,
+                   const std::uint32_t typeFilter,
+                   const vk::MemoryPropertyFlags properties) const {
+      const auto memProperties = physicalDevice.getMemoryProperties();
+
+      for (std::uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if (typeFilter & (1 << i) &&
+            (memProperties.memoryTypes[i].propertyFlags & properties) ==
+                properties) {
+          return i;
+        }
+      }
+
+      return 0;
+    }
+
+    [[nodiscard]] vk::raii::DeviceMemory
+    allocateMemory(const vk::raii::Device& device,
+                   const vk::raii::PhysicalDevice& physicalDevice,
+                   const vk::MemoryPropertyFlags properties) const {
+      const vk::MemoryRequirements memRequirements =
+          buffer.getMemoryRequirements();
+
+      const vk::MemoryAllocateInfo allocInfo{
+          .allocationSize = memRequirements.size,
+          .memoryTypeIndex = findMemoryType(
+              physicalDevice, memRequirements.memoryTypeBits, properties),
+      };
+
+      vk::raii::DeviceMemory bufferMemory{device, allocInfo};
+
+      buffer.bindMemory(*bufferMemory, 0);
+      return bufferMemory;
+    }
+  };
+  [[nodiscard]] AllocatedBuffer createVertexBuffer() const {
+    using enum vk::BufferUsageFlagBits;
+    using enum vk::MemoryPropertyFlagBits;
+
+    const vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, bufferSize,
+                                  eTransferSrc, eHostVisible | eHostCoherent};
+
+    void* data = stagingBuffer.memory.mapMemory(0, bufferSize);
+    std::memcpy(data, vertices.data(), bufferSize);
+    stagingBuffer.memory.unmapMemory();
+
+    AllocatedBuffer vertexBuffer{m_device, m_physicalDevice, bufferSize,
+                                 eTransferDst | eVertexBuffer, eDeviceLocal};
+
+    copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, bufferSize);
+
+    return vertexBuffer;
   }
 
-  [[nodiscard]] vk::raii::DeviceMemory allocateVertexBufferMemory() {
-    using enum vk::MemoryPropertyFlagBits;
-    const auto properties = eHostVisible | eHostCoherent;
+  void copyBuffer(const vk::raii::Buffer& srcBuffer,
+                  vk::raii::Buffer& dstBuffer,
+                  const vk::DeviceSize size) const {
+    const vk::CommandBufferAllocateInfo allocInfo{
+        .commandPool = *m_commandPool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    };
 
-    auto memory = allocateMemory(m_vertexBuffer, properties);
+    auto buffer = std::move(m_device.allocateCommandBuffers(allocInfo)[0]);
 
-    const auto buffersize = sizeof(vertices[0]) * vertices.size();
+    const vk::CommandBufferBeginInfo beginInfo{
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+    };
 
-    void* data = memory.mapMemory(0, buffersize);
+    buffer.begin(beginInfo);
 
-    std::memcpy(data, vertices.data(), buffersize);
+    const vk::BufferCopy copyRegion{
+        .size = size,
+    };
+    buffer.copyBuffer(*srcBuffer, *dstBuffer, copyRegion);
 
-    memory.unmapMemory();
+    buffer.end();
 
-    return memory;
+    vk::SubmitInfo submitInfo{};
+    submitInfo.setCommandBuffers(*buffer);
+
+    m_graphicsQueue.submit(submitInfo);
+    m_graphicsQueue.waitIdle();
   }
 
   void recordCommandBuffer(vk::CommandBuffer commandBuffer,
@@ -785,7 +831,7 @@ private:
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
                                *m_graphicsPipeline);
 
-    commandBuffer.bindVertexBuffers(0, *m_vertexBuffer, {0ull});
+    commandBuffer.bindVertexBuffers(0, *m_vertexBuffer.buffer, {0ull});
 
     const vk::Viewport viewport{
         .x = 0.0f,
@@ -956,8 +1002,8 @@ private:
       m_device.getQueue(m_queueFamilyIndices.graphicsFamily, 0)};
   vk::raii::Queue presentQueue{
       m_device.getQueue(m_queueFamilyIndices.presentFamily, 0)};
-  vk::raii::Buffer m_vertexBuffer{createVertexBuffer()};
-  vk::raii::DeviceMemory m_vertexBufferMemory{allocateVertexBufferMemory()};
+  vk::raii::CommandPool m_commandPool{createCommandPool()};
+  AllocatedBuffer m_vertexBuffer{createVertexBuffer()};
   SwapChainAggreggate m_swapChainAggregate{createSwapChain()};
   std::vector<vk::raii::ImageView> m_swapChainImageViews{createImageViews()};
   vk::raii::RenderPass m_renderPass{createRenderPass()};
@@ -965,7 +1011,6 @@ private:
   vk::raii::Pipeline m_graphicsPipeline{createGraphicsPipeline()};
   std::vector<vk::raii::Framebuffer> m_swapChainFramebuffers{
       createFramebuffers()};
-  vk::raii::CommandPool m_commandPool{createCommandPool()};
   std::vector<vk::raii::CommandBuffer> m_commandBuffers{createCommandBuffers()};
   std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores{
       createSemaphores(MAX_FRAMES_IN_FLIGHT)};
