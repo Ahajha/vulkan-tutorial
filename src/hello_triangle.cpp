@@ -69,9 +69,14 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices{
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+};
+
+const std::vector<std::uint16_t> indices{
+    0, 1, 2, 2, 3, 0,
 };
 
 class HelloTriangleApplication {
@@ -184,7 +189,7 @@ private:
 
   [[nodiscard]] OptionalQueueFamilyIndices
   findQueueFamilies(vk::PhysicalDevice device) const {
-    OptionalQueueFamilyIndices indices;
+    OptionalQueueFamilyIndices queueIndices;
     // Logic to find queue family indices to populate struct with
 
     const auto queueFamilies = device.getQueueFamilyProperties();
@@ -192,21 +197,21 @@ private:
     std::uint32_t i = 0;
     for (const auto& queueFamily : queueFamilies) {
       if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
-        indices.graphicsFamily = i;
+        queueIndices.graphicsFamily = i;
       }
 
       if (device.getSurfaceSupportKHR(i, *m_surface)) {
-        indices.presentFamily = i;
+        queueIndices.presentFamily = i;
       }
 
-      if (indices.isComplete()) {
+      if (queueIndices.isComplete()) {
         break;
       }
 
       i++;
     }
 
-    return indices;
+    return queueIndices;
   }
 
   // Returns true if deviceExtensions is a subset of the available device
@@ -752,6 +757,7 @@ private:
       return bufferMemory;
     }
   };
+
   [[nodiscard]] AllocatedBuffer createVertexBuffer() const {
     using enum vk::BufferUsageFlagBits;
     using enum vk::MemoryPropertyFlagBits;
@@ -767,6 +773,27 @@ private:
 
     AllocatedBuffer vertexBuffer{m_device, m_physicalDevice, bufferSize,
                                  eTransferDst | eVertexBuffer, eDeviceLocal};
+
+    copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, bufferSize);
+
+    return vertexBuffer;
+  }
+
+  [[nodiscard]] AllocatedBuffer createIndexBuffer() const {
+    using enum vk::BufferUsageFlagBits;
+    using enum vk::MemoryPropertyFlagBits;
+
+    const vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+
+    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, bufferSize,
+                                  eTransferSrc, eHostVisible | eHostCoherent};
+
+    void* data = stagingBuffer.memory.mapMemory(0, bufferSize);
+    std::memcpy(data, indices.data(), bufferSize);
+    stagingBuffer.memory.unmapMemory();
+
+    AllocatedBuffer vertexBuffer{m_device, m_physicalDevice, bufferSize,
+                                 eTransferDst | eIndexBuffer, eDeviceLocal};
 
     copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, bufferSize);
 
@@ -833,6 +860,9 @@ private:
 
     commandBuffer.bindVertexBuffers(0, *m_vertexBuffer.buffer, {0ull});
 
+    commandBuffer.bindIndexBuffer(*m_indexBuffer.buffer, 0,
+                                  vk::IndexType::eUint16);
+
     const vk::Viewport viewport{
         .x = 0.0f,
         .y = 0.0f,
@@ -849,7 +879,8 @@ private:
     };
     commandBuffer.setScissor(0, scissor);
 
-    commandBuffer.draw(3, 1, 0, 0);
+    commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0,
+                              0);
 
     commandBuffer.endRenderPass();
 
@@ -1004,6 +1035,7 @@ private:
       m_device.getQueue(m_queueFamilyIndices.presentFamily, 0)};
   vk::raii::CommandPool m_commandPool{createCommandPool()};
   AllocatedBuffer m_vertexBuffer{createVertexBuffer()};
+  AllocatedBuffer m_indexBuffer{createIndexBuffer()};
   SwapChainAggreggate m_swapChainAggregate{createSwapChain()};
   std::vector<vk::raii::ImageView> m_swapChainImageViews{createImageViews()};
   vk::raii::RenderPass m_renderPass{createRenderPass()};
