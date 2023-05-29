@@ -9,10 +9,13 @@
 #define GLFW_INCLUDE_VULKAN
 #include <glfwpp/glfwpp.h>
 
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -77,6 +80,12 @@ const std::vector<Vertex> vertices{
 
 const std::vector<std::uint16_t> indices{
     0, 1, 2, 2, 3, 0,
+};
+
+struct UniformBufferObject {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
 };
 
 class HelloTriangleApplication {
@@ -543,8 +552,24 @@ private:
     return {m_device, renderPassInfo};
   }
 
+  [[nodiscard]] vk::raii::DescriptorSetLayout
+  createDescriptorSetLayout() const {
+    constexpr vk::DescriptorSetLayoutBinding uboLayoutBinding{
+        .binding = 0,
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = 1,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+    };
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.setBindings(uboLayoutBinding);
+
+    return {m_device, layoutInfo};
+  }
+
   [[nodiscard]] vk::raii::PipelineLayout createPipelineLayout() const {
-    const vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+    pipelineLayoutInfo.setSetLayouts(*m_descriptorSetLayout);
     return {m_device, pipelineLayoutInfo};
   }
 
@@ -618,7 +643,7 @@ private:
         .rasterizerDiscardEnable = false,
         .polygonMode = vk::PolygonMode::eFill,
         .cullMode = vk::CullModeFlagBits::eBack,
-        .frontFace = vk::FrontFace::eClockwise,
+        .frontFace = vk::FrontFace::eCounterClockwise,
         .depthBiasEnable = false,
         .lineWidth = 1.0f,
     };
@@ -758,6 +783,37 @@ private:
     }
   };
 
+  struct PersistentMappedBuffer {
+    AllocatedBuffer allocated_buffer;
+    void* mapped_memory;
+
+    [[nodiscard]] PersistentMappedBuffer(
+        const vk::raii::Device& device,
+        const vk::raii::PhysicalDevice& physicalDevice,
+        const vk::DeviceSize size, const vk::BufferUsageFlags usage,
+        const vk::MemoryPropertyFlags properties)
+        : allocated_buffer(device, physicalDevice, size, usage, properties)
+        , mapped_memory(allocated_buffer.memory.mapMemory(0, size)) {}
+
+    ~PersistentMappedBuffer() {
+      if (mapped_memory != nullptr) {
+        allocated_buffer.memory.unmapMemory();
+      }
+    }
+
+    PersistentMappedBuffer& operator=(const PersistentMappedBuffer&) = delete;
+    PersistentMappedBuffer(const PersistentMappedBuffer&) = delete;
+
+    PersistentMappedBuffer& operator=(PersistentMappedBuffer&& other) {
+      std::swap(allocated_buffer, other.allocated_buffer);
+      std::swap(mapped_memory, other.mapped_memory);
+      return *this;
+    }
+    PersistentMappedBuffer(PersistentMappedBuffer&& other)
+        : allocated_buffer{std::move(other.allocated_buffer)}
+        , mapped_memory{std::exchange(other.mapped_memory, nullptr)} {}
+  };
+
   [[nodiscard]] AllocatedBuffer createVertexBuffer() const {
     using enum vk::BufferUsageFlagBits;
     using enum vk::MemoryPropertyFlagBits;
@@ -798,6 +854,71 @@ private:
     copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, bufferSize);
 
     return vertexBuffer;
+  }
+
+  [[nodiscard]] std::vector<PersistentMappedBuffer>
+  createUniformBuffers(std::uint32_t count) const {
+    const vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    std::vector<PersistentMappedBuffer> uniformBuffers;
+    uniformBuffers.reserve(count);
+
+    for (std::uint32_t i = 0; i < count; ++i) {
+      uniformBuffers.push_back(PersistentMappedBuffer{
+          m_device, m_physicalDevice, bufferSize,
+          vk::BufferUsageFlagBits::eUniformBuffer,
+          vk::MemoryPropertyFlagBits::eHostVisible |
+              vk::MemoryPropertyFlagBits::eHostCoherent});
+    }
+
+    return uniformBuffers;
+  }
+
+  [[nodiscard]] vk::raii::DescriptorPool createDescriptorPool() const {
+    const vk::DescriptorPoolSize poolSize{
+        .type = vk::DescriptorType::eUniformBuffer,
+        .descriptorCount = MAX_FRAMES_IN_FLIGHT,
+    };
+
+    vk::DescriptorPoolCreateInfo poolInfo{
+        .maxSets = MAX_FRAMES_IN_FLIGHT,
+    };
+    poolInfo.setPoolSizes(poolSize);
+
+    return {m_device, poolInfo};
+  }
+
+  [[nodiscard]] std::vector<vk::raii::DescriptorSet>
+  createDescriptorSets() const {
+    const std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT,
+                                                       *m_descriptorSetLayout);
+    vk::DescriptorSetAllocateInfo allocInfo{
+        .descriptorPool = *m_descriptorPool,
+    };
+    allocInfo.setSetLayouts(layouts);
+
+    auto descriptorSets = m_device.allocateDescriptorSets(allocInfo);
+
+    for (std::uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+      const vk::DescriptorBufferInfo bufferInfo{
+          .buffer = *m_uniformBuffers[i].allocated_buffer.buffer,
+          .offset = 0,
+          .range = sizeof(UniformBufferObject),
+      };
+
+      const vk::WriteDescriptorSet descriptorWrite{
+          .dstSet = *descriptorSets[i],
+          .dstBinding = 0,
+          .dstArrayElement = 0,
+          .descriptorCount = 1,
+          .descriptorType = vk::DescriptorType::eUniformBuffer,
+          .pBufferInfo = &bufferInfo,
+      };
+
+      m_device.updateDescriptorSets(descriptorWrite, nullptr);
+    }
+
+    return descriptorSets;
   }
 
   void copyBuffer(const vk::raii::Buffer& srcBuffer,
@@ -879,6 +1000,9 @@ private:
     };
     commandBuffer.setScissor(0, scissor);
 
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                     *m_pipelineLayout, 0,
+                                     *m_descriptorSets[currentFrame], nullptr);
     commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0,
                               0);
 
@@ -938,6 +1062,34 @@ private:
     m_swapChainFramebuffers = createFramebuffers();
   }
 
+  void updateUniformBuffer(uint32_t currentImage) {
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    const auto currentTime = std::chrono::high_resolution_clock::now();
+    float elapsedTime =
+        std::chrono::duration<float, std::chrono::seconds::period>(currentTime -
+                                                                   startTime)
+            .count();
+    UniformBufferObject ubo{
+        .model = glm::rotate(glm::mat4(1.0f), elapsedTime * glm::radians(90.0f),
+                             glm::vec3(0.0f, 0.0f, 1.0f)),
+        .view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f),
+                            glm::vec3(0.0f, 0.0f, 0.0f),
+                            glm::vec3(0.0f, 0.0f, 1.0f)),
+        .proj = glm::perspective(
+            glm::radians(45.0f),
+            m_swapChainAggregate.extent.width /
+                static_cast<float>(m_swapChainAggregate.extent.height),
+            0.1f, 10.0f),
+    };
+
+    // Account for differences between OpenGL and Vulkan
+    ubo.proj[1][1] *= -1;
+
+    std::memcpy(m_uniformBuffers[currentImage].mapped_memory, &ubo,
+                sizeof(ubo));
+  }
+
   void drawFrame() {
     const auto waitResult =
         m_device.waitForFences(*m_inFlightFences[currentFrame], true,
@@ -974,6 +1126,8 @@ private:
     constexpr vk::PipelineStageFlags waitStages[] = {
         vk::PipelineStageFlagBits::eColorAttachmentOutput,
     };
+
+    updateUniformBuffer(currentFrame);
 
     const auto submitInfo =
         vk::SubmitInfo{}
@@ -1036,6 +1190,12 @@ private:
   vk::raii::CommandPool m_commandPool{createCommandPool()};
   AllocatedBuffer m_vertexBuffer{createVertexBuffer()};
   AllocatedBuffer m_indexBuffer{createIndexBuffer()};
+  std::vector<PersistentMappedBuffer> m_uniformBuffers{
+      createUniformBuffers(MAX_FRAMES_IN_FLIGHT)};
+  vk::raii::DescriptorPool m_descriptorPool{createDescriptorPool()};
+  vk::raii::DescriptorSetLayout m_descriptorSetLayout{
+      createDescriptorSetLayout()};
+  std::vector<vk::raii::DescriptorSet> m_descriptorSets{createDescriptorSets()};
   SwapChainAggreggate m_swapChainAggregate{createSwapChain()};
   std::vector<vk::raii::ImageView> m_swapChainImageViews{createImageViews()};
   vk::raii::RenderPass m_renderPass{createRenderPass()};
