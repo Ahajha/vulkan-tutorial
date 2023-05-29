@@ -881,6 +881,7 @@ private:
     };
 
     vk::DescriptorPoolCreateInfo poolInfo{
+        .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
         .maxSets = MAX_FRAMES_IN_FLIGHT,
     };
     poolInfo.setPoolSizes(poolSize);
