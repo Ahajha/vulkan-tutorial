@@ -109,6 +109,12 @@ private:
                 VkDebugUtilsMessageTypeFlagsEXT messageType,
                 const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
                 [[maybe_unused]] void* pUserData) {
+    // This message is a known false positive with the validation layers, see
+    // issue:
+    // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/1340
+    if (pCallbackData->messageIdNumber == 2094043421) {
+      return VK_FALSE;
+    }
 
     std::cerr << "validation layer: " << pCallbackData->pMessage
               << "\n\tSeverity: " << messageSeverity
