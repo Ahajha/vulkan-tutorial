@@ -12,9 +12,12 @@ find_package(stb REQUIRED)
 add_library(stb_impl STATIC src/stb_impl.cpp)
 target_link_libraries(stb_impl PUBLIC stb::stb)
 
+add_library(stb_wrapper STATIC src/stb_wrapper.cpp)
+target_link_libraries(stb_wrapper PUBLIC stb_impl)
+
 foreach(TARGET environment_test hello_triangle)
     add_executable(${TARGET} "${CMAKE_CURRENT_SOURCE_DIR}/src/${TARGET}.cpp")
-    target_link_libraries(${TARGET} PRIVATE Vulkan::Vulkan glfwpp::glfwpp glm::glm stb_impl)
+    target_link_libraries(${TARGET} PRIVATE Vulkan::Vulkan glfwpp::glfwpp glm::glm stb_wrapper)
     target_compile_features(${TARGET} PRIVATE cxx_std_20)
     if (NOT MSVC)
         target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
