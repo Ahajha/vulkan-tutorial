@@ -1085,7 +1085,7 @@ private:
                             glm::vec3(0.0f, 0.0f, 1.0f)),
         .proj = glm::perspective(
             glm::radians(45.0f),
-            m_swapChainAggregate.extent.width /
+            static_cast<float>(m_swapChainAggregate.extent.width) /
                 static_cast<float>(m_swapChainAggregate.extent.height),
             0.1f, 10.0f),
     };
