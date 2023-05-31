@@ -790,6 +790,21 @@ private:
     }
   };
 
+  // Create staging buffer and copy data into it
+  [[nodiscard]] AllocatedBuffer stageData(const std::size_t size,
+                                          const void* src) const {
+    using enum vk::BufferUsageFlagBits;
+    using enum vk::MemoryPropertyFlagBits;
+    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, size,
+                                  eTransferSrc, eHostVisible | eHostCoherent};
+
+    void* dest = stagingBuffer.memory.mapMemory(0, size);
+    std::memcpy(dest, src, size);
+    stagingBuffer.memory.unmapMemory();
+
+    return stagingBuffer;
+  }
+
   struct PersistentMappedBuffer {
     AllocatedBuffer allocated_buffer;
     void* mapped_memory;
@@ -827,12 +842,7 @@ private:
 
     const vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, bufferSize,
-                                  eTransferSrc, eHostVisible | eHostCoherent};
-
-    void* data = stagingBuffer.memory.mapMemory(0, bufferSize);
-    std::memcpy(data, vertices.data(), bufferSize);
-    stagingBuffer.memory.unmapMemory();
+    auto stagingBuffer = stageData(bufferSize, vertices.data());
 
     AllocatedBuffer vertexBuffer{m_device, m_physicalDevice, bufferSize,
                                  eTransferDst | eVertexBuffer, eDeviceLocal};
@@ -848,12 +858,7 @@ private:
 
     const vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, bufferSize,
-                                  eTransferSrc, eHostVisible | eHostCoherent};
-
-    void* data = stagingBuffer.memory.mapMemory(0, bufferSize);
-    std::memcpy(data, indices.data(), bufferSize);
-    stagingBuffer.memory.unmapMemory();
+    auto stagingBuffer = stageData(bufferSize, indices.data());
 
     AllocatedBuffer vertexBuffer{m_device, m_physicalDevice, bufferSize,
                                  eTransferDst | eIndexBuffer, eDeviceLocal};
@@ -935,14 +940,7 @@ private:
     const vk::DeviceSize imageSize =
         static_cast<vk::DeviceSize>(result.width * result.height * 4);
 
-    using enum vk::BufferUsageFlagBits;
-    using enum vk::MemoryPropertyFlagBits;
-    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, imageSize,
-                                  eTransferSrc, eHostVisible | eHostCoherent};
-
-    void* data = stagingBuffer.memory.mapMemory(0, imageSize);
-    std::memcpy(data, result.data, static_cast<std::size_t>(imageSize));
-    stagingBuffer.memory.unmapMemory();
+    auto stagingBuffer = stageData(imageSize, result.data);
 
     return AllocatedImage(
         m_device, m_physicalDevice, static_cast<std::uint32_t>(result.width),
