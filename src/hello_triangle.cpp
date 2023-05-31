@@ -1,3 +1,5 @@
+#include "stb_wrapper.hpp"
+
 #define VULKAN_HPP_NO_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_enums.hpp>
@@ -725,6 +727,22 @@ private:
     return {m_device, poolInfo};
   }
 
+  [[nodiscard]] static std::uint32_t
+  findMemoryType(const vk::raii::PhysicalDevice& physicalDevice,
+                 const std::uint32_t typeFilter,
+                 const vk::MemoryPropertyFlags properties) {
+    const auto memProperties = physicalDevice.getMemoryProperties();
+
+    for (std::uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+      if (typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags &
+                                    properties) == properties) {
+        return i;
+      }
+    }
+
+    return 0;
+  }
+
   struct AllocatedBuffer {
     vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
@@ -750,23 +768,6 @@ private:
       };
 
       return {device, bufferInfo};
-    }
-
-    [[nodiscard]] std::uint32_t
-    findMemoryType(const vk::raii::PhysicalDevice& physicalDevice,
-                   const std::uint32_t typeFilter,
-                   const vk::MemoryPropertyFlags properties) const {
-      const auto memProperties = physicalDevice.getMemoryProperties();
-
-      for (std::uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if (typeFilter & (1 << i) &&
-            (memProperties.memoryTypes[i].propertyFlags & properties) ==
-                properties) {
-          return i;
-        }
-      }
-
-      return 0;
     }
 
     [[nodiscard]] vk::raii::DeviceMemory
@@ -878,6 +879,77 @@ private:
     }
 
     return uniformBuffers;
+  }
+
+  struct AllocatedImage {
+    vk::raii::Image image;
+    vk::raii::DeviceMemory memory;
+
+    [[nodiscard]] AllocatedImage(const vk::raii::Device& device,
+                                 const vk::raii::PhysicalDevice& physicalDevice,
+                                 const std::uint32_t width,
+                                 const std::uint32_t height,
+                                 const vk::Format format,
+                                 const vk::ImageTiling tiling,
+                                 const vk::ImageUsageFlags usage,
+                                 const vk::MemoryPropertyFlags properties)
+        : image{nullptr}
+        , memory{nullptr} {
+      const vk::ImageCreateInfo imageInfo{
+          .imageType = vk::ImageType::e2D,
+          .format = format,
+          .extent =
+              {
+                  .width = width,
+                  .height = height,
+                  .depth = 1,
+              },
+          .mipLevels = 1,
+          .arrayLayers = 1,
+          .samples = vk::SampleCountFlagBits::e1, // Default for vulkan.hpp
+          .tiling = tiling,
+          .usage = usage,
+          .sharingMode = vk::SharingMode::eExclusive,   // Default
+          .initialLayout = vk::ImageLayout::eUndefined, // Default
+      };
+
+      image = {device, imageInfo};
+
+      const auto memRequirements = image.getMemoryRequirements();
+
+      const vk::MemoryAllocateInfo allocInfo{
+          .allocationSize = memRequirements.size,
+          .memoryTypeIndex = findMemoryType(
+              physicalDevice, memRequirements.memoryTypeBits, properties),
+      };
+
+      memory = {device, allocInfo};
+
+      image.bindMemory(*memory, 0);
+    }
+  };
+
+  [[nodiscard]] AllocatedImage createTextureImage() {
+    auto result = stb::load("textures/pom.jpg", stb::Channels::rgb_alpha);
+
+    const vk::DeviceSize imageSize =
+        static_cast<vk::DeviceSize>(result.width * result.height * 4);
+
+    using enum vk::BufferUsageFlagBits;
+    using enum vk::MemoryPropertyFlagBits;
+    AllocatedBuffer stagingBuffer{m_device, m_physicalDevice, imageSize,
+                                  eTransferSrc, eHostVisible | eHostCoherent};
+
+    void* data = stagingBuffer.memory.mapMemory(0, imageSize);
+    std::memcpy(data, result.data, static_cast<std::size_t>(imageSize));
+    stagingBuffer.memory.unmapMemory();
+
+    return AllocatedImage(
+        m_device, m_physicalDevice, static_cast<std::uint32_t>(result.width),
+        static_cast<std::uint32_t>(result.height), vk::Format::eR8G8B8A8Srgb,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal);
   }
 
   [[nodiscard]] vk::raii::DescriptorPool createDescriptorPool() const {
@@ -1199,6 +1271,7 @@ private:
   AllocatedBuffer m_indexBuffer{createIndexBuffer()};
   std::vector<PersistentMappedBuffer> m_uniformBuffers{
       createUniformBuffers(MAX_FRAMES_IN_FLIGHT)};
+  AllocatedImage m_image{createTextureImage()};
   vk::raii::DescriptorPool m_descriptorPool{createDescriptorPool()};
   vk::raii::DescriptorSetLayout m_descriptorSetLayout{
       createDescriptorSetLayout()};

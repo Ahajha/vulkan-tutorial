@@ -46,6 +46,10 @@ compile_shader(shader.vert vert.spv)
 target_sources(hello_triangle PRIVATE
     "${CMAKE_BINARY_DIR}/shaders/frag.spv"
     "${CMAKE_BINARY_DIR}/shaders/vert.spv"
+    "textures/pom.jpg"
 )
+
+add_custom_command(TARGET hello_triangle POST_BUILD
+COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/textures ${CMAKE_BINARY_DIR}/textures)
 
 #add_subdirectory(triangle_hpp)
