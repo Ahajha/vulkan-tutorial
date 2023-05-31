@@ -998,35 +998,58 @@ private:
     return descriptorSets;
   }
 
+  struct SingleUseCommandBuffer : vk::raii::CommandBuffer {
+
+    SingleUseCommandBuffer(const vk::raii::Device& device,
+                           const vk::Queue graphicsQueue,
+                           const vk::raii::CommandPool& commandPool)
+        : vk::raii::CommandBuffer(nullptr)
+        , m_graphicsQueue(graphicsQueue) {
+      const vk::CommandBufferAllocateInfo allocInfo{
+          .commandPool = *commandPool,
+          .level = vk::CommandBufferLevel::ePrimary,
+          .commandBufferCount = 1,
+      };
+
+      static_cast<vk::raii::CommandBuffer&>(*this) =
+          std::move(device.allocateCommandBuffers(allocInfo)[0]);
+
+      constexpr vk::CommandBufferBeginInfo beginInfo{
+          .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+      };
+
+      begin(beginInfo);
+    }
+
+    ~SingleUseCommandBuffer() {
+      end();
+
+      vk::SubmitInfo submitInfo{};
+      submitInfo.setCommandBuffers(**this);
+
+      m_graphicsQueue.submit(submitInfo);
+      m_graphicsQueue.waitIdle();
+    }
+
+    SingleUseCommandBuffer& operator=(const SingleUseCommandBuffer&) = delete;
+    SingleUseCommandBuffer& operator=(SingleUseCommandBuffer&&) = delete;
+    SingleUseCommandBuffer(const SingleUseCommandBuffer&) = delete;
+    SingleUseCommandBuffer(SingleUseCommandBuffer&&) = delete;
+
+  private:
+    vk::Queue m_graphicsQueue;
+  };
+
   void copyBuffer(const vk::raii::Buffer& srcBuffer,
                   vk::raii::Buffer& dstBuffer,
                   const vk::DeviceSize size) const {
-    const vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = *m_commandPool,
-        .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1,
-    };
-
-    auto buffer = std::move(m_device.allocateCommandBuffers(allocInfo)[0]);
-
-    const vk::CommandBufferBeginInfo beginInfo{
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-    };
-
-    buffer.begin(beginInfo);
+    SingleUseCommandBuffer commandBuffer{m_device, *m_graphicsQueue,
+                                         m_commandPool};
 
     const vk::BufferCopy copyRegion{
         .size = size,
     };
-    buffer.copyBuffer(*srcBuffer, *dstBuffer, copyRegion);
-
-    buffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    submitInfo.setCommandBuffers(*buffer);
-
-    m_graphicsQueue.submit(submitInfo);
-    m_graphicsQueue.waitIdle();
+    commandBuffer.copyBuffer(*srcBuffer, *dstBuffer, copyRegion);
   }
 
   void recordCommandBuffer(vk::CommandBuffer commandBuffer,
