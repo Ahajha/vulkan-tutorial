@@ -451,33 +451,32 @@ private:
     };
   }
 
-  [[nodiscard]] std::vector<vk::raii::ImageView> createImageViews() {
+  [[nodiscard]] vk::raii::ImageView createImageView(vk::Image image,
+                                                    vk::Format format) const {
+    const vk::ImageViewCreateInfo createInfo{
+        .image = image,
+        .viewType = vk::ImageViewType::e2D,
+        .format = format,
+        .subresourceRange =
+            {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+
+    return {m_device, createInfo};
+  }
+
+  [[nodiscard]] std::vector<vk::raii::ImageView> createSwapChainImageViews() {
     std::vector<vk::raii::ImageView> swapChainImageViews;
     swapChainImageViews.reserve(m_swapChainAggregate.images.size());
 
     for (const auto& image : m_swapChainAggregate.images) {
-      const vk::ImageViewCreateInfo createInfo{
-          .image = image,
-          .viewType = vk::ImageViewType::e2D,
-          .format = m_swapChainAggregate.format,
-          .components =
-              {
-                  .r = vk::ComponentSwizzle::eIdentity,
-                  .g = vk::ComponentSwizzle::eIdentity,
-                  .b = vk::ComponentSwizzle::eIdentity,
-                  .a = vk::ComponentSwizzle::eIdentity,
-              },
-          .subresourceRange =
-              {
-                  .aspectMask = vk::ImageAspectFlagBits::eColor,
-                  .baseMipLevel = 0,
-                  .levelCount = 1,
-                  .baseArrayLayer = 0,
-                  .layerCount = 1,
-              },
-      };
-
-      swapChainImageViews.emplace_back(m_device, createInfo);
+      swapChainImageViews.emplace_back(
+          createImageView(image, m_swapChainAggregate.format));
     }
 
     return swapChainImageViews;
@@ -1082,6 +1081,10 @@ private:
     return image;
   }
 
+  [[nodiscard]] vk::raii::ImageView createTextureImageView() {
+    return createImageView(*m_texture_image.image, vk::Format::eR8G8B8A8Srgb);
+  }
+
   [[nodiscard]] vk::raii::DescriptorPool createDescriptorPool() const {
     const vk::DescriptorPoolSize poolSize{
         .type = vk::DescriptorType::eUniformBuffer,
@@ -1248,7 +1251,7 @@ private:
     m_device.waitIdle();
 
     m_swapChainAggregate = createSwapChain();
-    m_swapChainImageViews = createImageViews();
+    m_swapChainImageViews = createSwapChainImageViews();
     m_swapChainFramebuffers = createFramebuffers();
   }
 
@@ -1382,13 +1385,15 @@ private:
   AllocatedBuffer m_indexBuffer{createIndexBuffer()};
   std::vector<PersistentMappedBuffer> m_uniformBuffers{
       createUniformBuffers(MAX_FRAMES_IN_FLIGHT)};
-  AllocatedImage m_image{createTextureImage()};
+  AllocatedImage m_texture_image{createTextureImage()};
+  vk::raii::ImageView m_texture_image_view{createTextureImageView()};
   vk::raii::DescriptorPool m_descriptorPool{createDescriptorPool()};
   vk::raii::DescriptorSetLayout m_descriptorSetLayout{
       createDescriptorSetLayout()};
   std::vector<vk::raii::DescriptorSet> m_descriptorSets{createDescriptorSets()};
   SwapChainAggreggate m_swapChainAggregate{createSwapChain()};
-  std::vector<vk::raii::ImageView> m_swapChainImageViews{createImageViews()};
+  std::vector<vk::raii::ImageView> m_swapChainImageViews{
+      createSwapChainImageViews()};
   vk::raii::RenderPass m_renderPass{createRenderPass()};
   vk::raii::PipelineLayout m_pipelineLayout{createPipelineLayout()};
   vk::raii::Pipeline m_graphicsPipeline{createGraphicsPipeline()};
