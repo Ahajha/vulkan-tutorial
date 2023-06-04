@@ -934,6 +934,130 @@ private:
     }
   };
 
+  struct SingleUseCommandBuffer : vk::raii::CommandBuffer {
+
+    SingleUseCommandBuffer(const vk::raii::Device& device,
+                           const vk::Queue graphicsQueue,
+                           const vk::raii::CommandPool& commandPool)
+        : vk::raii::CommandBuffer(nullptr)
+        , m_graphicsQueue(graphicsQueue) {
+      const vk::CommandBufferAllocateInfo allocInfo{
+          .commandPool = *commandPool,
+          .level = vk::CommandBufferLevel::ePrimary,
+          .commandBufferCount = 1,
+      };
+
+      static_cast<vk::raii::CommandBuffer&>(*this) =
+          std::move(device.allocateCommandBuffers(allocInfo)[0]);
+
+      constexpr vk::CommandBufferBeginInfo beginInfo{
+          .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
+      };
+
+      begin(beginInfo);
+    }
+
+    ~SingleUseCommandBuffer() {
+      end();
+
+      vk::SubmitInfo submitInfo{};
+      submitInfo.setCommandBuffers(**this);
+
+      m_graphicsQueue.submit(submitInfo);
+      m_graphicsQueue.waitIdle();
+    }
+
+    SingleUseCommandBuffer& operator=(const SingleUseCommandBuffer&) = delete;
+    SingleUseCommandBuffer& operator=(SingleUseCommandBuffer&&) = delete;
+    SingleUseCommandBuffer(const SingleUseCommandBuffer&) = delete;
+    SingleUseCommandBuffer(SingleUseCommandBuffer&&) = delete;
+
+  private:
+    vk::Queue m_graphicsQueue;
+  };
+
+  void transitionImageLayout(vk::Image image, const vk::ImageLayout oldLayout,
+                             const vk::ImageLayout newLayout) {
+    SingleUseCommandBuffer commandBuffer{m_device, *m_graphicsQueue,
+                                         m_commandPool};
+
+    vk::ImageMemoryBarrier barrier{
+        .srcAccessMask = {}, // TODO
+        .dstAccessMask = {}, // TODO
+        .oldLayout = oldLayout,
+        .newLayout = newLayout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange =
+            {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+
+    vk::PipelineStageFlags sourceStage;
+    vk::PipelineStageFlags destinationStage;
+    if (oldLayout == vk::ImageLayout::eUndefined &&
+        newLayout == vk::ImageLayout::eTransferDstOptimal) {
+      barrier.srcAccessMask = {};
+      barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+      sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+      destinationStage = vk::PipelineStageFlagBits::eTransfer;
+    } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
+               newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+      barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+      barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+      sourceStage = vk::PipelineStageFlagBits::eTransfer;
+      destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+    } else {
+      throw std::invalid_argument("unsupported layout transition!");
+    }
+
+    commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, nullptr,
+                                  nullptr, barrier);
+  }
+
+  void copyBufferToImage(vk::Buffer buffer, vk::Image image,
+                         const std::uint32_t width,
+                         const std::uint32_t height) {
+    SingleUseCommandBuffer commandBuffer{m_device, *m_graphicsQueue,
+                                         m_commandPool};
+
+    vk::BufferImageCopy region{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource =
+            {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        .imageOffset =
+            {
+                .x = 0,
+                .y = 0,
+                .z = 0,
+            },
+        .imageExtent =
+            {
+                .width = width,
+                .height = height,
+                .depth = 1,
+            },
+    };
+
+    commandBuffer.copyBufferToImage(
+        buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
+  }
+
   [[nodiscard]] AllocatedImage createTextureImage() {
     auto result = stb::load("textures/pom.jpg", stb::Channels::rgb_alpha);
 
@@ -942,12 +1066,22 @@ private:
 
     auto stagingBuffer = stageData(imageSize, result.data);
 
-    return AllocatedImage(
+    auto image = AllocatedImage(
         m_device, m_physicalDevice, static_cast<std::uint32_t>(result.width),
         static_cast<std::uint32_t>(result.height), vk::Format::eR8G8B8A8Srgb,
         vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
         vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    transitionImageLayout(*image.image, vk::ImageLayout::eUndefined,
+                          vk::ImageLayout::eTransferDstOptimal);
+    copyBufferToImage(*stagingBuffer.buffer, *image.image,
+                      static_cast<std::uint32_t>(result.width),
+                      static_cast<std::uint32_t>(result.height));
+    transitionImageLayout(*image.image, vk::ImageLayout::eTransferDstOptimal,
+                          vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    return image;
   }
 
   [[nodiscard]] vk::raii::DescriptorPool createDescriptorPool() const {
@@ -997,48 +1131,6 @@ private:
 
     return descriptorSets;
   }
-
-  struct SingleUseCommandBuffer : vk::raii::CommandBuffer {
-
-    SingleUseCommandBuffer(const vk::raii::Device& device,
-                           const vk::Queue graphicsQueue,
-                           const vk::raii::CommandPool& commandPool)
-        : vk::raii::CommandBuffer(nullptr)
-        , m_graphicsQueue(graphicsQueue) {
-      const vk::CommandBufferAllocateInfo allocInfo{
-          .commandPool = *commandPool,
-          .level = vk::CommandBufferLevel::ePrimary,
-          .commandBufferCount = 1,
-      };
-
-      static_cast<vk::raii::CommandBuffer&>(*this) =
-          std::move(device.allocateCommandBuffers(allocInfo)[0]);
-
-      constexpr vk::CommandBufferBeginInfo beginInfo{
-          .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
-      };
-
-      begin(beginInfo);
-    }
-
-    ~SingleUseCommandBuffer() {
-      end();
-
-      vk::SubmitInfo submitInfo{};
-      submitInfo.setCommandBuffers(**this);
-
-      m_graphicsQueue.submit(submitInfo);
-      m_graphicsQueue.waitIdle();
-    }
-
-    SingleUseCommandBuffer& operator=(const SingleUseCommandBuffer&) = delete;
-    SingleUseCommandBuffer& operator=(SingleUseCommandBuffer&&) = delete;
-    SingleUseCommandBuffer(const SingleUseCommandBuffer&) = delete;
-    SingleUseCommandBuffer(SingleUseCommandBuffer&&) = delete;
-
-  private:
-    vk::Queue m_graphicsQueue;
-  };
 
   void copyBuffer(const vk::raii::Buffer& srcBuffer,
                   vk::raii::Buffer& dstBuffer,
