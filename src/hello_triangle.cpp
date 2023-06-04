@@ -977,13 +977,11 @@ private:
   };
 
   void transitionImageLayout(vk::Image image, const vk::ImageLayout oldLayout,
-                             const vk::ImageLayout newLayout) {
+                             const vk::ImageLayout newLayout) const {
     SingleUseCommandBuffer commandBuffer{m_device, *m_graphicsQueue,
                                          m_commandPool};
 
     vk::ImageMemoryBarrier barrier{
-        .srcAccessMask = {}, // TODO
-        .dstAccessMask = {}, // TODO
         .oldLayout = oldLayout,
         .newLayout = newLayout,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -1025,11 +1023,11 @@ private:
 
   void copyBufferToImage(vk::Buffer buffer, vk::Image image,
                          const std::uint32_t width,
-                         const std::uint32_t height) {
+                         const std::uint32_t height) const {
     SingleUseCommandBuffer commandBuffer{m_device, *m_graphicsQueue,
                                          m_commandPool};
 
-    vk::BufferImageCopy region{
+    const vk::BufferImageCopy region{
         .bufferOffset = 0,
         .bufferRowLength = 0,
         .bufferImageHeight = 0,
@@ -1058,7 +1056,7 @@ private:
         buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
   }
 
-  [[nodiscard]] AllocatedImage createTextureImage() {
+  [[nodiscard]] AllocatedImage createTextureImage() const {
     auto result = stb::load("textures/pom.jpg", stb::Channels::rgb_alpha);
 
     const vk::DeviceSize imageSize =
