@@ -1061,7 +1061,7 @@ private:
     const vk::DeviceSize imageSize =
         static_cast<vk::DeviceSize>(result.width * result.height * 4);
 
-    auto stagingBuffer = stageData(imageSize, result.data);
+    auto stagingBuffer = stageData(imageSize, result.data.get());
 
     auto image = AllocatedImage(
         m_device, m_physicalDevice, static_cast<std::uint32_t>(result.width),

@@ -17,7 +17,7 @@ Result load(const char* filename, Channels desired_channels) {
       .width = width,
       .height = height,
       .bytes_per_pixel = bytes_per_pixel,
-      .data = {data},
+      .data = PixelData{data},
   };
 }
 } // namespace stb

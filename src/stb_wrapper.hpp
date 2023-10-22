@@ -1,5 +1,6 @@
 #include <stb_image.h>
 
+#include <memory>
 #include <utility>
 
 namespace stb {
@@ -12,30 +13,14 @@ enum class Channels {
   rgb_alpha = STBI_rgb_alpha,
 };
 
-// Like std::unique_ptr, but without the memory overhead of storing the custom
-// deleter.
-struct PixelData {
-  unsigned char* data;
-
-  operator unsigned char*() { return data; }
-  operator const unsigned char*() const { return data; }
-
-  PixelData(unsigned char* d)
-      : data{d} {}
-
-  ~PixelData() { stbi_image_free(data); }
-
-  PixelData& operator=(const PixelData&) = delete;
-  PixelData(const PixelData&) = delete;
-
-  PixelData& operator=(PixelData&& other) {
-    std::swap(data, other.data);
-    return *this;
-  }
-
-  PixelData(PixelData&& other)
-      : data{std::exchange(other.data, nullptr)} {}
+namespace detail {
+constexpr static auto image_deleter = [](unsigned char* data) {
+  stbi_image_free(data);
 };
+}
+
+using PixelData =
+    std::unique_ptr<unsigned char, decltype(detail::image_deleter)>;
 
 struct Result {
   int width;
